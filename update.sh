@@ -22,6 +22,10 @@ curl -fsSL -A "$UA" -o "$WORK/gas/sttm-price-and-withdrawals.xlsx" \
 # cache under work/gas/gsh_cache is the series: it grows a day per run and holds the only
 # copy of everything that has already rolled off. Never delete it.
 python3 "$HERE/fetch_gsh.py" "$WORK/gas/gsh_cache" "$WORK/gsh_daily.csv"
+# The two master workbooks above are monthly, so on their own the gas series ends at the
+# close of the last completed month. The same clearing prices are on nemweb nightly; this
+# only ever extends the series past the workbooks' end, so revisions still come from them.
+python3 "$HERE/fetch_gas_current.py" "$WORK/gas/mibb_cache" "$WORK/gas_current.csv"
 
 echo "== 3/5 AIP terminal gate prices"
 python3 "$HERE/fetch_aip.py" "$WORK/petrol/AIP_TGP.xlsx"
@@ -40,7 +44,8 @@ python3 "$HERE/build_electricity.py" "$WORK/nem" \
   "$WORK/elec_daily.csv" "$WORK/elec_monthly.csv" "$WORK/elec_quarterly.csv" \
   "$WORK/elec_annual.csv"
 python3 "$HERE/build_gas.py" "$WORK/gas/dwgm-prices-and-demand.xlsx" \
-  "$WORK/gas/sttm-price-and-withdrawals.xlsx" "$WORK/gas_daily.csv" "$WORK/gsh_daily.csv"
+  "$WORK/gas/sttm-price-and-withdrawals.xlsx" "$WORK/gas_daily.csv" "$WORK/gsh_daily.csv" \
+  "$WORK/gas_current.csv"
 python3 "$HERE/aggregate.py" "$WORK/gas_daily.csv" "$WORK/gas_monthly.csv" \
   "$WORK/gas_quarterly.csv" "$WORK/gas_annual.csv"
 
