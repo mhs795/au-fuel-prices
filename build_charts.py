@@ -56,19 +56,24 @@ SERIES = [
 ]
 
 # Row selectors. None is the whole tab; ("window", n) is the trailing n years measured
-# from that series' own last date; ("year", y) is calendar year y.
+# from that series' own last date; ("year", y) is calendar year y. The fourth item is an
+# axis override for that chart alone; without one the series' own y-range applies.
 STANDARD_VARIANTS = [
-    ("daily", "daily, last 2 years", ("window", 2)),
-    ("daily", "daily, last 5 years", ("window", 5)),
-    ("monthly", "monthly", None),
-    ("quarterly", "quarterly", None),
-    ("annual", "annual", None),
+    ("daily", "daily, last 2 years", ("window", 2), None),
+    ("daily", "daily, last 5 years", ("window", 5), None),
+    ("monthly", "monthly", None, None),
+    ("quarterly", "quarterly", None, None),
+    ("annual", "annual", None, None),
 ]
-# Petrol also gets a chart per recent calendar year. They share the fixed petrol axis, so
-# one year can be read straight against the other without rescaling.
+# Petrol also gets a chart per recent calendar year, each on a tighter axis of its own so
+# a single year's movement is legible rather than flattened into the full 75-350 band.
+# 2026 has to reach 350 rather than a tighter ceiling: TGP diesel peaked at 325.9 c/L on
+# 9 April 2026, and anything lower crops that spike off the top of the plot.
+YLIM_2026 = (125, 350, 25)
+YLIM_2025 = (125, 200, 25)
 PETROL_VARIANTS = STANDARD_VARIANTS[:2] + [
-    ("daily", "daily, 2026", ("year", 2026)),
-    ("daily", "daily, 2025", ("year", 2025)),
+    ("daily", "daily, 2026", ("year", 2026), YLIM_2026),
+    ("daily", "daily, 2025", ("year", 2025), YLIM_2025),
 ] + STANDARD_VARIANTS[2:]
 
 # One electricity/gas pair per state, each on its own two-scale chart. Tasmania has no
@@ -153,21 +158,36 @@ def recede_axes(chart, n_points):
 
 
 
-def check_ylim(ws, cols, first_row, last_row, ylim):
-    """A fixed axis hides anything outside it, so refuse to draw one that would."""
+def check_ylim(ws, cols, first_row, last_row, ylim, chart_title, deliberate):
+    """A fixed axis hides anything outside it, so never let that pass unremarked.
+
+    The shared petrol band is meant to contain everything, so anything outside it is a
+    mistake and stops the build. An axis chosen for one chart is an editorial decision -
+    it is allowed to crop, but every build says what it crops, so the cost stays visible.
+    """
     lo, hi = ylim[0], ylim[1]
+    outside = []
     for header, name in cols:
         j = col_index(ws, header)
         if j is None:
             continue
         for i in range(first_row, last_row + 1):
             v = ws.cell(row=i, column=j).value
-            if v is None or lo <= v <= hi:
-                continue
-            raise SystemExit(
-                f"ERROR: {ws.title} {header} = {v} at row {i} falls outside the fixed "
-                f"axis range {lo}-{hi}, so the chart would draw it off the plot. Widen "
-                f"PETROL_YLIM in build_charts.py.")
+            if v is not None and not lo <= v <= hi:
+                outside.append((ws.cell(row=i, column=1).value, header, v))
+    if not outside:
+        return
+    if not deliberate:
+        d, header, v = outside[0]
+        raise SystemExit(
+            f"ERROR: {ws.title} {header} = {v} on {d} falls outside the fixed axis range "
+            f"{lo}-{hi}, so the chart would draw it off the plot. Widen PETROL_YLIM in "
+            f"build_charts.py.")
+    days = sorted({d for d, _, _ in outside})
+    worst = max(outside, key=lambda t: abs(t[2] - (hi if t[2] > hi else lo)))
+    print(f"  note: '{chart_title}' axis {lo}-{hi} crops {len(days)} day(s), "
+          f"{days[0]:%Y-%m-%d} to {days[-1]:%Y-%m-%d}; furthest is {worst[1]} "
+          f"{worst[2]} on {worst[0]:%Y-%m-%d}", flush=True)
 
 
 def line_chart(ws, title, y_title, cols, first_row, last_row, ylim=None,
@@ -288,7 +308,7 @@ def write_charts(wb):
 
     for stem, title, y_title, cols, ylim in SERIES:
         variants = PETROL_VARIANTS if ylim else STANDARD_VARIANTS
-        for freq, label, selector in variants:
+        for freq, label, selector, ylim_override in variants:
             name = f"{stem} {freq}"
             if name not in wb.sheetnames:
                 continue
@@ -299,10 +319,12 @@ def write_charts(wb):
             first, last = rows
             if selector and selector[0] == "year":
                 label = year_label(data, first, last, selector[1])
-            if ylim:
-                check_ylim(data, cols, first, last, ylim)
-            chart = line_chart(data, f"{title} — {label}", y_title, cols, first, last,
-                               ylim=ylim)
+            axis = ylim_override or ylim
+            chart_title = f"{title} — {label}"
+            if axis:
+                check_ylim(data, cols, first, last, axis, chart_title,
+                           deliberate=ylim_override is not None)
+            chart = line_chart(data, chart_title, y_title, cols, first, last, ylim=axis)
             ws.add_chart(chart, next(slots))
 
     ws.column_dimensions["A"].width = 2
