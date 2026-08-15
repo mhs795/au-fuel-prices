@@ -34,7 +34,8 @@ re-fetched. The first build downloads several GB.
   Reporting (data.qld.gov.au)
 
 Full method, caveats and exact file URLs are written into the workbook's
-*Sources & notes* tab by `notes.py`.
+*Sources & notes* tab by `notes.py`. A *Summary charts* tab holds native Excel charts of
+every series at each frequency, built by `build_charts.py` from cells on the data tabs.
 
 ## Design notes
 
@@ -62,6 +63,7 @@ Full method, caveats and exact file URLs are written into the workbook's
 | `build_gas.py` | AEMO gas workbooks → daily |
 | `build_petrol.py` | AIP + retail sources → daily |
 | `aggregate.py` | generic daily → monthly/quarterly/annual averaging |
+| `build_charts.py` | native Excel charts on the Summary charts tab |
 | `notes.py` | content of the Sources & notes tab |
 | `build_workbook.py` | assembles and formats the workbook |
 

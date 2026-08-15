@@ -1,5 +1,5 @@
 """Assemble the daily, monthly, quarterly and annual series into one formatted Excel
-workbook.
+workbook, plus a Summary charts tab of native Excel charts drawn from those tabs.
 
   build_workbook.py <work_dir> <out.xlsx> [--no-retail]
 
@@ -11,6 +11,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from notes import write_notes
+from build_charts import write_charts
 
 WORK, OUT = sys.argv[1], sys.argv[2]
 RETAIL = "--no-retail" not in sys.argv[3:]
@@ -107,5 +108,6 @@ for stem, label, title, subtitle, numfmt in GROUPS:
     coverage.append((label, f"{span_txt} — " + ", ".join(spans) + " rows"))
 
 write_notes(wb, datetime.date.today().isoformat(), coverage, retail=RETAIL)
+write_charts(wb)
 wb.save(OUT)
 print(f"wrote {OUT} ({len(wb.sheetnames)} tabs)", flush=True)
