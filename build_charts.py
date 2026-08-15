@@ -78,34 +78,24 @@ PETROL_VARIANTS = STANDARD_VARIANTS[:2] + [
     ("daily", "daily, 2025", ("year", 2025), YLIM_2025),
 ] + STANDARD_VARIANTS[2:]
 
-# Daily petrol, one state per chart, for a single calendar year. The multi-state charts
-# stack every state on one plot, which is exactly where a day-to-day reading stops being
-# possible: the capitals track each other within a couple of cents at the terminal gate,
-# and three retail discount cycles running out of phase read as noise rather than as three
-# cycles. Splitting them apart is the only way to see a single market's own week.
-# Each group shares one axis across its states so the charts stay comparable side by side,
-# tighter than the 75-350 band because one year of one market moves within a few tens of
-# cents. Both bands are verified against the data on every build.
+# Daily retail petrol, one state per chart, for a single calendar year. The all-states
+# chart stacks NSW, QLD and WA on one plot, which is exactly where a day-to-day reading
+# stops being possible: three discount cycles running out of phase read as noise rather
+# than as three cycles. Splitting them apart is the only way to see a single state's own
+# week. Wholesale TGP is deliberately not split this way - the capitals sit within a
+# couple of cents of each other at the terminal gate, so the national line already tells
+# that story and seven near-identical charts would only pad the tab.
+# The states share one axis so the charts stay comparable side by side, tighter than the
+# 75-350 band because one year of one market moves within a few tens of cents. The band is
+# verified against the data on every build.
 STATE_YEAR = 2025
-TGP_CITY_YLIM = (150, 190, 5)        # 2025 city TGP spans 153.8-187.4 c/L
 RETAIL_STATE_YLIM = (155, 200, 5)    # 2025 state ULP spans 162.4-195.2 c/L
 
-# AIP publishes terminal gate prices by capital city, not by state, so each chart is named
-# for both: the price is the city terminal's, and it is the wholesale price for that state.
-TGP_CITIES = [("NSW", "Sydney"), ("VIC", "Melbourne"), ("QLD", "Brisbane"),
-              ("SA", "Adelaide"), ("WA", "Perth"), ("NT", "Darwin"), ("TAS", "Hobart")]
-
 # {data tab stem: (chart title, y-range, [(label, [(header, legend, palette slot)])])}
-# The title is given here rather than inherited from SERIES because the national TGP
-# chart is titled as national, and a Sydney chart must not be.
 # The palette slot is given explicitly because a series has to keep the colour it carries
 # on the all-states chart: NSW retail is the same blue whether it is drawn beside QLD and
 # WA or on its own. Left implicit it would restart at slot 0 on every single-state chart.
 PER_STATE = {
-    "Petrol TGP": ("Petrol wholesale TGP", TGP_CITY_YLIM, [
-        (f"{state} ({city})", [(f"TGP_petrol_{city.lower()}", "Petrol", 0),
-                               (f"TGP_diesel_{city.lower()}", "Diesel", 1)])
-        for state, city in TGP_CITIES]),
     "Petrol retail": ("Retail ULP pump price", RETAIL_STATE_YLIM, [
         (state, [(f"{state}_ULP", f"{state} ULP", k)])
         for k, state in enumerate(["NSW", "QLD", "WA"])]),
@@ -123,7 +113,7 @@ SECTIONS = {
     "Petrol TGP": ("Petrol — wholesale (terminal gate)",
                    "AIP terminal gate prices, cents per litre, business days only. The "
                    "cost side of the pump price, before retail margin and the discount "
-                   f"cycle. The single-state charts cover {STATE_YEAR}."),
+                   "cycle."),
     "Petrol retail": ("Petrol — retail (pump)",
                       "Average pump price across reporting sites, cents per litre. "
                       "Coverage differs by state — check the _sites columns on the data "
@@ -439,7 +429,8 @@ def write_charts(wb):
                 "data tabs — the numbers behind any chart are on the matching tab, and "
                 "the headings below say which. Daily is shown for gas and petrol over "
                 "the last two years and the last five, and for petrol over 2026 and "
-                f"{STATE_YEAR} separately, including one chart per state for {STATE_YEAR}; "
+                f"{STATE_YEAR} separately, with retail also split one state per chart "
+                f"for {STATE_YEAR}; "
                 "electricity starts at monthly, because daily spot is too spiky to read "
                 "at this size. Monthly, quarterly and annual show full history. A series "
                 "keeps the same colour across all of its charts. The all-frequency petrol "
