@@ -55,13 +55,31 @@ SERIES = [
      [("NSW_ULP", "NSW"), ("QLD_ULP", "QLD"), ("WA_ULP", "WA")], PETROL_YLIM),
 ]
 
-# (data tab frequency, chart label, trailing window in years - None for full history)
-VARIANTS = [
-    ("daily", "daily, last 2 years", 2),
-    ("daily", "daily, last 5 years", 5),
+# Row selectors. None is the whole tab; ("window", n) is the trailing n years measured
+# from that series' own last date; ("year", y) is calendar year y.
+STANDARD_VARIANTS = [
+    ("daily", "daily, last 2 years", ("window", 2)),
+    ("daily", "daily, last 5 years", ("window", 5)),
     ("monthly", "monthly", None),
     ("quarterly", "quarterly", None),
     ("annual", "annual", None),
+]
+# Petrol also gets a chart per recent calendar year. They share the fixed petrol axis, so
+# one year can be read straight against the other without rescaling.
+PETROL_VARIANTS = STANDARD_VARIANTS[:2] + [
+    ("daily", "daily, 2026", ("year", 2026)),
+    ("daily", "daily, 2025", ("year", 2025)),
+] + STANDARD_VARIANTS[2:]
+
+# One electricity/gas pair per state, each on its own two-scale chart. Tasmania has no
+# gas hub - it is not in the STTM and has no DWGM - so it has no chart here; TAS spot
+# prices are on the electricity tabs. Each pair starts where its gas series starts,
+# which differs by hub.
+STATE_PAIRS = [
+    ("New South Wales", "NSW1_price_dwa", "NSW spot", "SYD_exante", "Sydney STTM"),
+    ("Victoria", "VIC1_price_dwa", "VIC spot", "VIC_DWGM_6am", "VIC DWGM"),
+    ("Queensland", "QLD1_price_dwa", "QLD spot", "BRI_exante", "Brisbane STTM"),
+    ("South Australia", "SA1_price_dwa", "SA spot", "ADL_exante", "Adelaide STTM"),
 ]
 
 
@@ -73,18 +91,32 @@ def col_index(ws, header):
     return None
 
 
-def daily_start_row(ws, years):
-    """First row within the trailing window, so daily charts stay legible."""
-    last = ws.cell(row=ws.max_row, column=1).value
-    cutoff = last.toordinal() - round(365.25 * years)
-    lo, hi = FIRST_DATA_ROW, ws.max_row
-    while lo < hi:
-        mid = (lo + hi) // 2
-        if ws.cell(row=mid, column=1).value.toordinal() < cutoff:
-            lo = mid + 1
-        else:
-            hi = mid
-    return lo
+def search_rows(ws, ok):
+    """First and last row whose date column A satisfies ok(), or None if none do."""
+    rows = [i for i in range(FIRST_DATA_ROW, ws.max_row + 1)
+            if ok(ws.cell(row=i, column=1).value)]
+    return (rows[0], rows[-1]) if rows else None
+
+
+def select_rows(ws, selector):
+    """Resolve a variant's row selector to (first_row, last_row)."""
+    if selector is None:
+        return FIRST_DATA_ROW, ws.max_row
+    kind, n = selector
+    if kind == "window":
+        cutoff = ws.cell(row=ws.max_row, column=1).value.toordinal() - round(365.25 * n)
+        return search_rows(ws, lambda d: d.toordinal() >= cutoff)
+    if kind == "year":
+        return search_rows(ws, lambda d: d.year == n)
+    raise ValueError(f"unknown row selector {selector!r}")
+
+
+def year_label(ws, first_row, last_row, year):
+    """Say so when a calendar-year chart is only part of a year."""
+    last = ws.cell(row=last_row, column=1).value
+    if (last.month, last.day) == (12, 31):
+        return f"daily, {year}"
+    return f"daily, {year} (to {last.strftime('%-d %b')})"
 
 
 def row_of(ws, key):
@@ -164,13 +196,21 @@ def line_chart(ws, title, y_title, cols, first_row, last_row, ylim=None,
     return chart
 
 
-def combined_chart(wb):
-    """Electricity and gas quarterly on one chart, gas on a secondary axis.
+def first_populated_row(ws, col):
+    """First row where a column actually has a number - hubs start at different dates."""
+    for i in range(FIRST_DATA_ROW, ws.max_row + 1):
+        if ws.cell(row=i, column=col).value is not None:
+            return i
+    return None
 
-    Victorian series on both sides - VIC1 spot against the Victorian DWGM - so the two
-    lines describe the same market rather than two unrelated ones. The window starts at
-    2007-Q1, the first quarter gas exists; charting from 1998 would leave two thirds of
-    the plot with only one line on it.
+
+def combined_chart(wb, state, elec_col, elec_name, gas_col, gas_name):
+    """One state's electricity and gas, quarterly, with gas on a secondary axis.
+
+    Both series are from the same state, so the two lines describe one market rather than
+    two unrelated ones. Each chart starts at the first quarter its gas hub published -
+    2007-Q1 for the Victorian DWGM, 2010-Q3 for Sydney and Adelaide, 2011-Q4 for Brisbane
+    - because charting from 1998 would leave most of the plot with only one line on it.
 
     The two prices are on genuinely different scales ($/MWh against $/GJ), so read the
     shapes and their timing against each other, not the crossings - where the lines sit
@@ -178,21 +218,25 @@ def combined_chart(wb):
     market.
     """
     elec, gas = wb["Electricity quarterly"], wb["Gas quarterly"]
-    start_key = gas.cell(row=FIRST_DATA_ROW, column=1).value
-    e0, e1 = row_of(elec, start_key), elec.max_row
-    g0, g1 = FIRST_DATA_ROW, gas.max_row
+    g0 = first_populated_row(gas, col_index(gas, gas_col))
+    g1 = gas.max_row
+    e0, e1 = row_of(elec, gas.cell(row=g0, column=1).value), elec.max_row
+    if e1 - e0 != g1 - g0:
+        raise SystemExit(f"ERROR: {state} quarterly rows do not line up between the "
+                         f"electricity and gas tabs ({e1 - e0 + 1} vs {g1 - g0 + 1}); "
+                         f"the two lines would be drawn against the wrong quarters.")
 
     c1 = LineChart()
-    c1.title = "Electricity and gas — quarterly, Victoria (two scales)"
+    c1.title = f"Electricity and gas — quarterly, {state} (two scales)"
     c1.y_axis.title = "Electricity $/MWh"
     c1.y_axis.axId = 100
-    s = Series(Reference(elec, min_col=col_index(elec, "VIC1_price_dwa"),
-                         min_row=e0, max_row=e1), title="Electricity VIC ($/MWh, left)")
+    s = Series(Reference(elec, min_col=col_index(elec, elec_col), min_row=e0, max_row=e1),
+               title=f"{elec_name} ($/MWh, left)")
     style_series(s, PALETTE[0])
     c1.append(s)
     c1.set_categories(Reference(elec, min_col=1, min_row=e0, max_row=e1))
     recede_axes(c1, e1 - e0 + 1)
-    c1.height, c1.width = 9.5, 32.5
+    c1.height, c1.width = 8.2, 15.5
 
     c2 = LineChart()
     c2.y_axis.axId = 200
@@ -200,8 +244,8 @@ def combined_chart(wb):
     c2.y_axis.majorGridlines = None
     c2.y_axis.delete = False
     c2.y_axis.spPr = GraphicalProperties(ln=LineProperties(solidFill=AXIS, w=9525))
-    s = Series(Reference(gas, min_col=col_index(gas, "VIC_DWGM_6am"),
-                         min_row=g0, max_row=g1), title="Gas VIC DWGM ($/GJ, right)")
+    s = Series(Reference(gas, min_col=col_index(gas, gas_col), min_row=g0, max_row=g1),
+               title=f"{gas_name} ($/GJ, right)")
     style_series(s, PALETTE[1])
     c2.append(s)
 
@@ -215,6 +259,14 @@ def combined_chart(wb):
     return c1
 
 
+def iter_slots(row=4, pitch=18):
+    """Anchors for a two-column grid of charts, top to bottom."""
+    while True:
+        yield f"B{row}"
+        yield f"L{row}"
+        row += pitch
+
+
 def write_charts(wb):
     ws = wb.create_sheet("Summary charts", 1)
     ws.sheet_view.showGridLines = False
@@ -222,31 +274,36 @@ def write_charts(wb):
     ws["A1"].font = TITLE_FONT
     ws["A2"] = ("Every series at each frequency, drawn live from the data tabs — the "
                 "numbers behind any chart are on the matching tab. Daily is shown over "
-                "the last two years and the last five; monthly, quarterly and annual show "
-                "full history. A series keeps the same colour across all of its charts. "
-                "The petrol charts are pinned to a fixed 100–300 c/L scale.")
+                "the last two years and the last five, and for petrol over 2026 and 2025 "
+                "separately; monthly, quarterly and annual show full history. A series "
+                "keeps the same colour across all of its charts. The petrol charts are "
+                "pinned to a fixed 75–350 c/L scale so they can be read against each "
+                "other. The four two-scale charts pair each state's electricity with its "
+                "own gas hub.")
     ws["A2"].font = SUB_FONT
 
-    row, col = 4, 0
-
-    ws.add_chart(combined_chart(wb), "B4")
-    row += 21
+    slots = iter_slots()
+    for pair in STATE_PAIRS:
+        ws.add_chart(combined_chart(wb, *pair), next(slots))
 
     for stem, title, y_title, cols, ylim in SERIES:
-        for freq, label, window in VARIANTS:
+        variants = PETROL_VARIANTS if ylim else STANDARD_VARIANTS
+        for freq, label, selector in variants:
             name = f"{stem} {freq}"
             if name not in wb.sheetnames:
                 continue
             data = wb[name]
-            first = daily_start_row(data, window) if window else FIRST_DATA_ROW
+            rows = select_rows(data, selector)
+            if rows is None:            # a year the series does not reach
+                continue
+            first, last = rows
+            if selector and selector[0] == "year":
+                label = year_label(data, first, last, selector[1])
             if ylim:
-                check_ylim(data, cols, first, data.max_row, ylim)
-            chart = line_chart(data, f"{title} — {label}", y_title, cols,
-                               first, data.max_row, ylim=ylim)
-            ws.add_chart(chart, f"{'B' if col == 0 else 'L'}{row}")
-            col += 1
-            if col == 2:
-                col, row = 0, row + 18
+                check_ylim(data, cols, first, last, ylim)
+            chart = line_chart(data, f"{title} — {label}", y_title, cols, first, last,
+                               ylim=ylim)
+            ws.add_chart(chart, next(slots))
 
     ws.column_dimensions["A"].width = 2
     return ws
