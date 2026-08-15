@@ -1,0 +1,6 @@
+# Cached source data and generated outputs - all rebuildable with ./update.sh
+work/
+*.xlsx
+*.csv
+__pycache__/
+*.pyc
