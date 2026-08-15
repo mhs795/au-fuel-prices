@@ -64,3 +64,14 @@ Full method, caveats and exact file URLs are written into the workbook's
 | `aggregate.py` | generic daily → monthly/annual averaging |
 | `notes.py` | content of the Sources & notes tab |
 | `build_workbook.py` | assembles and formats the workbook |
+
+## Install
+
+```bash
+ln -sf "$PWD/PRICES" ~/.local/bin/PRICES
+ln -sf "$PWD/PRICES" ~/.local/bin/prices
+```
+
+`PRICES` expects the scripts at `~/Documents/Work/au_fuel_prices/`; edit `SCRIPT` at the
+top of the wrapper if they live elsewhere. Set `FUEL_DEST` to change where the workbook
+is written.

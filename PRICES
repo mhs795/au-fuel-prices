@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# PRICES - rebuild the AU daily energy & fuel price workbook.
+#
+#   PRICES              everything, including the retail pump price tab
+#   PRICES NO RETAIL    skip retail; the workbook is built without that tab
+#
+# Thin wrapper around ~/Documents/Work/au_fuel_prices/update.sh.
+set -euo pipefail
+
+SCRIPT="$HOME/Documents/Work/au_fuel_prices/update.sh"
+export FUEL_NO_RETAIL=0
+pass=()
+
+while [ $# -gt 0 ]; do
+    word=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+    case "$word" in
+        no)
+            # "NO RETAIL" as two words; a bare "NO" is not meaningful on its own
+            next=$(printf '%s' "${2:-}" | tr '[:upper:]' '[:lower:]')
+            if [ "$next" = "retail" ]; then
+                FUEL_NO_RETAIL=1; shift 2; continue
+            fi
+            pass+=("$1"); shift ;;
+        noretail|no-retail|--no-retail|-n)
+            FUEL_NO_RETAIL=1; shift ;;
+        retail|--retail)
+            FUEL_NO_RETAIL=0; shift ;;
+        -h|--help|help)
+            sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *)
+            pass+=("$1"); shift ;;
+    esac
+done
+
+if [ ! -x "$SCRIPT" ]; then
+    echo "PRICES: cannot run $SCRIPT" >&2
+    [ -f "$SCRIPT" ] && echo "PRICES: it exists but is not executable - run: chmod +x '$SCRIPT'" >&2
+    exit 1
+fi
+
+if [ "$FUEL_NO_RETAIL" = "1" ]; then
+    echo "PRICES: rebuilding WITHOUT retail (electricity, gas, terminal gate prices)"
+else
+    echo "PRICES: rebuilding everything, including retail pump prices"
+fi
+
+start=$(date +%s)
+"$SCRIPT" ${pass+"${pass[@]}"}
+echo "PRICES: finished in $(( ($(date +%s) - start) / 60 )) min"
