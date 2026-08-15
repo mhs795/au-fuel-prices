@@ -2,7 +2,8 @@
 
 Every price column becomes a simple mean of the daily values present in the period -
 days with no value are skipped, not treated as zero. Count columns are handled on their
-own terms: interval and schedule counts are summed, site counts are averaged. An n_days
+own terms: interval and schedule counts are summed, so is traded volume - a month's
+gas is the sum of its days, not their average - and site counts are averaged. An n_days
 column records how many days each period actually rests on, so partial periods (the
 current month, the current quarter, the current year, a month with a source gap) are
 visible rather than silently understated.
@@ -14,7 +15,7 @@ Quarters are calendar quarters, labelled YYYY-Qn, to match the annual tabs.
 import csv, sys
 from collections import defaultdict
 
-SUM_SUFFIXES = ("_intervals", "_n_schedules")
+SUM_SUFFIXES = ("_intervals", "_n_schedules", "_qty_GJ")
 SITE_SUFFIXES = ("_sites",)
 
 

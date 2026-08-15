@@ -50,7 +50,12 @@ SERIES = [
       ("TAS1_price_dwa", "TAS"), ("VIC1_price_dwa", "VIC")], None),
     ("Gas", "Gas wholesale price", "$/GJ",
      [("VIC_DWGM_6am", "VIC DWGM"), ("SYD_exante", "Sydney STTM"),
-      ("ADL_exante", "Adelaide STTM"), ("BRI_exante", "Brisbane STTM")], None),
+      ("ADL_exante", "Adelaide STTM"), ("BRI_exante", "Brisbane STTM"),
+      # The hub sits on the same axis as the markets it competes with, which is the
+      # point of putting it here: Wallumbilla against Brisbane STTM is a real
+      # comparison. Its slots continue after the four above so no colour is reused.
+      ("GSH_WAL_price", "Wallumbilla GSH", 4),
+      ("GSH_SEQ_price", "SEQ GSH", 5)], None),
     ("Petrol TGP", "Petrol wholesale TGP, national", "cents/litre",
      [("TGP_petrol_national", "Petrol"), ("TGP_diesel_national", "Diesel")], PETROL_YLIM),
     ("Petrol retail", "Retail ULP pump price", "cents/litre",
@@ -109,7 +114,9 @@ SECTIONS = {
                     "NEM regional spot prices, demand-weighted. Monthly and coarser only "
                     "— daily spot is too spiky to read at this size."),
     "Gas": ("Gas",
-            "Victorian DWGM schedule prices and the three STTM hub ex-ante prices, $/GJ."),
+            "Victorian DWGM schedule prices, the three STTM hub ex-ante prices, and the "
+            "Gas Supply Hub, $/GJ. The hub's data starts in 2026, so it is a short line "
+            "at the right-hand end of the longer charts and absent from the annual one."),
     "Petrol TGP": ("Petrol — wholesale (terminal gate)",
                    "AIP terminal gate prices, cents per litre, business days only. The "
                    "cost side of the pump price, before retail margin and the discount "
@@ -254,6 +261,13 @@ def line_chart(ws, title, y_title, cols, first_row, last_row, ylim=None,
         j = col_index(ws, header)
         if j is None:
             continue
+        # A series with one point in range draws nothing - the markers are off - but
+        # would still claim a legend entry, so the chart would name a line that is not
+        # there. Short series drop out and reappear on their own as history accumulates:
+        # the Gas Supply Hub starts in 2026, so it is on the daily and monthly gas charts
+        # from the start and joins the annual one once it has two years.
+        if populated(ws, j, first_row, last_row) < 2:
+            continue
         s = Series(Reference(ws, min_col=j, min_row=first_row, max_row=last_row),
                    title=name)
         style_series(s, PALETTE[slot % len(PALETTE)])
@@ -266,6 +280,12 @@ def line_chart(ws, title, y_title, cols, first_row, last_row, ylim=None,
     else:
         chart.legend = None
     return chart
+
+
+def populated(ws, col, first_row, last_row):
+    """How many rows in range actually carry a value in that column."""
+    return sum(ws.cell(row=i, column=col).value is not None
+               for i in range(first_row, last_row + 1))
 
 
 def first_populated_row(ws, col):

@@ -21,13 +21,14 @@ HDR_FONT = Font(color="FFFFFF", bold=True, size=10)
 TITLE_FONT = Font(bold=True, size=13, color="1F3864")
 SUB_FONT = Font(italic=True, size=9, color="595959")
 THIN = Side(style="thin", color="BFBFBF")
-COUNT_SUFFIXES = ("_intervals", "_n_schedules", "_sites", "n_days")
+COUNT_SUFFIXES = ("_intervals", "_n_schedules", "_sites", "n_days", "_qty_GJ")
 
 GROUPS = [
     ("elec", "Electricity", "Electricity — NEM regional spot prices", "$/MWh, GST exclusive. "
      "dwa = demand-weighted average. Source: AEMO aggregated price and demand data.", "0.00"),
     ("gas", "Gas", "Gas — east coast wholesale market prices", "$/GJ. Victorian DWGM schedule "
-     "prices and STTM hub ex-ante/ex-post prices. Source: AEMO.", "0.0000"),
+     "prices, STTM hub ex-ante/ex-post prices, and Gas Supply Hub traded prices and "
+     "volumes at Wallumbilla and SEQ (2026 on). Source: AEMO.", "0.0000"),
     ("tgp", "Petrol TGP", "Petrol — wholesale terminal gate prices", "Cents per litre, GST "
      "inclusive. Seven capitals plus a volume-weighted national average, business days only. "
      "Source: Australian Institute of Petroleum.", "0.00"),

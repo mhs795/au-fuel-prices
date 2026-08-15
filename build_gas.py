@@ -1,13 +1,25 @@
 """Build a daily east-coast wholesale gas price series ($/GJ) from two AEMO
 master workbooks: the Victorian DWGM prices-and-demand file and the STTM
 price-and-withdrawals file.
+
+  build_gas.py <dwgm.xlsx> <sttm.xlsx> <out.csv> [gsh_daily.csv]
+
+Gas Supply Hub columns are merged in when fetch_gsh.py has produced them. They join this
+series rather than getting tabs of their own because they are the same quantity - an east
+coast wholesale gas price in $/GJ - and belong on one axis with the DWGM and the STTM. They
+start in 2026 and are blank before that, which is a fact about the source and not a gap in
+the build: see fetch_gsh.py for why no deeper history exists.
+
+The GSH also runs a few weeks ahead of the master workbooks, which are republished monthly,
+so the last rows of this series carry GSH prices and no DWGM or STTM ones.
 """
-import csv, sys
+import csv, os, sys
 from datetime import datetime
 from collections import defaultdict
 import openpyxl
 
 DWGM, STTM, OUT = sys.argv[1], sys.argv[2], sys.argv[3]
+GSH = sys.argv[4] if len(sys.argv) > 4 else None
 
 def as_date(v):
     """Gas_Date arrives as a datetime in some rows and a DD/MM/YYYY string in others."""
@@ -53,19 +65,31 @@ for hub, sheet in (("SYD", "SYD price and withdrawals"),
                 pass
 wb.close()
 
-dates = sorted(d for d in set(vic) | set(sttm) if d >= "2007-02-01")
+# --- Gas Supply Hub: Wallumbilla and SEQ, already one row per gas day ---
+gsh, gsh_cols = {}, []
+if GSH and os.path.exists(GSH):
+    with open(GSH, newline="") as fh:
+        r = csv.reader(fh)
+        gsh_cols = next(r)[1:]
+        for row in r:
+            gsh[row[0]] = dict(zip(gsh_cols, row[1:]))
+
+dates = sorted(d for d in set(vic) | set(sttm) | set(gsh) if d >= "2007-02-01")
 cols = ["VIC_DWGM_6am", "VIC_DWGM_schedule_mean",
         "SYD_exante", "SYD_expost", "ADL_exante", "ADL_expost",
         "BRI_exante", "BRI_expost"]
 
 with open(OUT, "w", newline="") as fh:
     w = csv.writer(fh)
-    w.writerow(["date"] + cols + ["VIC_DWGM_n_schedules"])
+    w.writerow(["date"] + cols + ["VIC_DWGM_n_schedules"] + gsh_cols)
     for d in dates:
         v = vic.get(d, {})
         sched = [p for p in v.values() if p is not None]
         six = v.get(6, "")
         mean = round(sum(sched) / len(sched), 4) if sched else ""
         s = sttm.get(d, {})
-        w.writerow([d, six, mean] + [s.get(c, "") for c in cols[2:]] + [len(sched)])
-print("wrote", OUT, "days", len(dates), dates[0], "->", dates[-1], flush=True)
+        g = gsh.get(d, {})
+        w.writerow([d, six, mean] + [s.get(c, "") for c in cols[2:]] + [len(sched)]
+                   + [g.get(c, "") for c in gsh_cols])
+print("wrote", OUT, "days", len(dates), dates[0], "->", dates[-1],
+      f"(GSH on {len(gsh)})" if gsh else "(no GSH)", flush=True)
