@@ -32,11 +32,14 @@ LINE_W = 19050       # ~1.5pt in EMU
 TITLE_FONT = Font(bold=True, size=13, color="1F3864")
 SUB_FONT = Font(italic=True, size=9, color="595959")
 
-# The petrol charts are pinned to a common 100-300 c/L scale so that wholesale and
-# retail, and each frequency, can be read against one another without rescaling by eye.
+# The petrol charts are pinned to a common scale so that wholesale and retail, and each
+# frequency, can be read against one another without rescaling by eye. The band is set
+# wide enough to contain every charted petrol value - the 2020 TGP trough at 80.8 c/L and
+# the April 2026 peak at 325.9 - so nothing is drawn off the edge of a plot. Widen it if a
+# future refresh moves outside; the assertion in check_ylim() will say so.
 # Electricity and gas stay auto-scaled - their spikes are orders of magnitude, not
 # percentages, and a fixed range would either flatten them or clip them off.
-PETROL_YLIM = (100, 300)
+PETROL_YLIM = (75, 350, 50)   # min, max, gridline spacing
 
 # (data tab stem, chart title, y-axis title, [(column header, legend name), ...], y-range)
 SERIES = [
@@ -117,6 +120,24 @@ def recede_axes(chart, n_points):
         p=[Paragraph(pPr=ParagraphProperties(defRPr=small), endParaRPr=small)])
 
 
+
+def check_ylim(ws, cols, first_row, last_row, ylim):
+    """A fixed axis hides anything outside it, so refuse to draw one that would."""
+    lo, hi = ylim[0], ylim[1]
+    for header, name in cols:
+        j = col_index(ws, header)
+        if j is None:
+            continue
+        for i in range(first_row, last_row + 1):
+            v = ws.cell(row=i, column=j).value
+            if v is None or lo <= v <= hi:
+                continue
+            raise SystemExit(
+                f"ERROR: {ws.title} {header} = {v} at row {i} falls outside the fixed "
+                f"axis range {lo}-{hi}, so the chart would draw it off the plot. Widen "
+                f"PETROL_YLIM in build_charts.py.")
+
+
 def line_chart(ws, title, y_title, cols, first_row, last_row, ylim=None,
                width=15.5, height=8.2):
     chart = LineChart()
@@ -124,7 +145,7 @@ def line_chart(ws, title, y_title, cols, first_row, last_row, ylim=None,
     chart.y_axis.title = y_title
     chart.height, chart.width = height, width
     if ylim:
-        chart.y_axis.scaling.min, chart.y_axis.scaling.max = ylim
+        chart.y_axis.scaling.min, chart.y_axis.scaling.max, chart.y_axis.majorUnit = ylim
     for k, (header, name) in enumerate(cols):
         j = col_index(ws, header)
         if j is None:
@@ -218,6 +239,8 @@ def write_charts(wb):
                 continue
             data = wb[name]
             first = daily_start_row(data, window) if window else FIRST_DATA_ROW
+            if ylim:
+                check_ylim(data, cols, first, data.max_row, ylim)
             chart = line_chart(data, f"{title} — {label}", y_title, cols,
                                first, data.max_row, ylim=ylim)
             ws.add_chart(chart, f"{'B' if col == 0 else 'L'}{row}")
