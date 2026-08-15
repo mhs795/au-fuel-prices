@@ -76,6 +76,11 @@ PETROL_VARIANTS = STANDARD_VARIANTS[:2] + [
     ("daily", "daily, 2025", ("year", 2025), YLIM_2025),
 ] + STANDARD_VARIANTS[2:]
 
+# Series that get no daily chart on the summary tab. Electricity is here: half-hourly
+# spot averaged to a day is too spiky to read at chart size, and the monthly, quarterly
+# and annual charts carry the same story. The "Electricity daily" data tab is unaffected.
+NO_DAILY_CHARTS = {"Electricity"}
+
 # One electricity/gas pair per state, each on its own two-scale chart. Tasmania has no
 # gas hub - it is not in the STTM and has no DWGM - so it has no chart here; TAS spot
 # prices are on the electricity tabs. Each pair starts where its gas series starts,
@@ -292,10 +297,13 @@ def write_charts(wb):
     ws.sheet_view.showGridLines = False
     ws["A1"] = "Summary charts"
     ws["A1"].font = TITLE_FONT
-    ws["A2"] = ("Every series at each frequency, drawn live from the data tabs — the "
-                "numbers behind any chart are on the matching tab. Daily is shown over "
-                "the last two years and the last five, and for petrol over 2026 and 2025 "
-                "separately; monthly, quarterly and annual show full history. A series "
+    ws["A2"] = ("Each series at every frequency it is charted at, drawn live from the "
+                "data tabs — the "
+                "numbers behind any chart are on the matching tab. Daily is shown for "
+                "gas and petrol over the last two years and the last five, and for "
+                "petrol over 2026 and 2025 separately; electricity starts at monthly, "
+                "because daily spot is too spiky to read at this size. Monthly, "
+                "quarterly and annual show full history. A series "
                 "keeps the same colour across all of its charts. The petrol charts are "
                 "pinned to a fixed 75–350 c/L scale so they can be read against each "
                 "other. The four two-scale charts pair each state's electricity with its "
@@ -308,6 +316,8 @@ def write_charts(wb):
 
     for stem, title, y_title, cols, ylim in SERIES:
         variants = PETROL_VARIANTS if ylim else STANDARD_VARIANTS
+        if stem in NO_DAILY_CHARTS:
+            variants = [v for v in variants if v[0] != "daily"]
         for freq, label, selector, ylim_override in variants:
             name = f"{stem} {freq}"
             if name not in wb.sheetnames:

@@ -58,11 +58,12 @@ def aggregate(raw):
 
 
 os.makedirs(CACHE, exist_ok=True)
-listing = json.loads(fetch(f"{BASE}?dateFrom={START_YEAR}-01-01&dateTo=2030-12-31"))
+today = date.today()
+# the listing window has to stay ahead of the calendar, or new files stop being seen
+listing = json.loads(fetch(f"{BASE}?dateFrom={START_YEAR}-01-01&dateTo={today.year + 1}-12-31"))
 files = sorted((f for f in listing if int(month_key(f["fileName"])[0]) >= START_YEAR),
                key=lambda f: month_key(f["fileName"]))
 
-today = date.today()
 cur = (f"{today.year:04d}", f"{today.month:02d}")
 pm = date(today.year, today.month, 1).toordinal() - 1
 prev_d = date.fromordinal(pm)
