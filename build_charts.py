@@ -30,6 +30,8 @@ FIRST_DATA_ROW = 5
 LINE_W = 19050       # ~1.5pt in EMU
 
 TITLE_FONT = Font(bold=True, size=13, color="1F3864")
+SECTION_FONT = Font(bold=True, size=12, color="1F3864")
+SUBSECTION_FONT = Font(bold=True, size=10, color="595959")
 SUB_FONT = Font(italic=True, size=9, color="595959")
 
 # The petrol charts are pinned to a common scale so that wholesale and retail, and each
@@ -75,6 +77,58 @@ PETROL_VARIANTS = STANDARD_VARIANTS[:2] + [
     ("daily", "daily, 2026", ("year", 2026), YLIM_2026),
     ("daily", "daily, 2025", ("year", 2025), YLIM_2025),
 ] + STANDARD_VARIANTS[2:]
+
+# Daily petrol, one state per chart, for a single calendar year. The multi-state charts
+# stack every state on one plot, which is exactly where a day-to-day reading stops being
+# possible: the capitals track each other within a couple of cents at the terminal gate,
+# and three retail discount cycles running out of phase read as noise rather than as three
+# cycles. Splitting them apart is the only way to see a single market's own week.
+# Each group shares one axis across its states so the charts stay comparable side by side,
+# tighter than the 75-350 band because one year of one market moves within a few tens of
+# cents. Both bands are verified against the data on every build.
+STATE_YEAR = 2025
+TGP_CITY_YLIM = (150, 190, 5)        # 2025 city TGP spans 153.8-187.4 c/L
+RETAIL_STATE_YLIM = (155, 200, 5)    # 2025 state ULP spans 162.4-195.2 c/L
+
+# AIP publishes terminal gate prices by capital city, not by state, so each chart is named
+# for both: the price is the city terminal's, and it is the wholesale price for that state.
+TGP_CITIES = [("NSW", "Sydney"), ("VIC", "Melbourne"), ("QLD", "Brisbane"),
+              ("SA", "Adelaide"), ("WA", "Perth"), ("NT", "Darwin"), ("TAS", "Hobart")]
+
+# {data tab stem: (chart title, y-range, [(label, [(header, legend, palette slot)])])}
+# The title is given here rather than inherited from SERIES because the national TGP
+# chart is titled as national, and a Sydney chart must not be.
+# The palette slot is given explicitly because a series has to keep the colour it carries
+# on the all-states chart: NSW retail is the same blue whether it is drawn beside QLD and
+# WA or on its own. Left implicit it would restart at slot 0 on every single-state chart.
+PER_STATE = {
+    "Petrol TGP": ("Petrol wholesale TGP", TGP_CITY_YLIM, [
+        (f"{state} ({city})", [(f"TGP_petrol_{city.lower()}", "Petrol", 0),
+                               (f"TGP_diesel_{city.lower()}", "Diesel", 1)])
+        for state, city in TGP_CITIES]),
+    "Petrol retail": ("Retail ULP pump price", RETAIL_STATE_YLIM, [
+        (state, [(f"{state}_ULP", f"{state} ULP", k)])
+        for k, state in enumerate(["NSW", "QLD", "WA"])]),
+}
+
+# Heading and standfirst for each block of charts on the summary tab, keyed by data tab
+# stem. A heading is only written if the block below it actually has charts, so a
+# no-retail build does not leave a heading standing over nothing.
+SECTIONS = {
+    "Electricity": ("Electricity",
+                    "NEM regional spot prices, demand-weighted. Monthly and coarser only "
+                    "— daily spot is too spiky to read at this size."),
+    "Gas": ("Gas",
+            "Victorian DWGM schedule prices and the three STTM hub ex-ante prices, $/GJ."),
+    "Petrol TGP": ("Petrol — wholesale (terminal gate)",
+                   "AIP terminal gate prices, cents per litre, business days only. The "
+                   "cost side of the pump price, before retail margin and the discount "
+                   f"cycle. The single-state charts cover {STATE_YEAR}."),
+    "Petrol retail": ("Petrol — retail (pump)",
+                      "Average pump price across reporting sites, cents per litre. "
+                      "Coverage differs by state — check the _sites columns on the data "
+                      f"tab. The single-state charts cover {STATE_YEAR}."),
+}
 
 # Series that get no daily chart on the summary tab. Electricity is here: half-hourly
 # spot averaged to a day is too spiky to read at chart size, and the monthly, quarterly
@@ -172,7 +226,8 @@ def check_ylim(ws, cols, first_row, last_row, ylim, chart_title, deliberate):
     """
     lo, hi = ylim[0], ylim[1]
     outside = []
-    for header, name in cols:
+    for col in cols:
+        header = col[0]
         j = col_index(ws, header)
         if j is None:
             continue
@@ -186,8 +241,8 @@ def check_ylim(ws, cols, first_row, last_row, ylim, chart_title, deliberate):
         d, header, v = outside[0]
         raise SystemExit(
             f"ERROR: {ws.title} {header} = {v} on {d} falls outside the fixed axis range "
-            f"{lo}-{hi}, so the chart would draw it off the plot. Widen PETROL_YLIM in "
-            f"build_charts.py.")
+            f"{lo}-{hi} of '{chart_title}', so the chart would draw it off the plot. "
+            f"Widen that chart's axis constant in build_charts.py.")
     days = sorted({d for d, _, _ in outside})
     worst = max(outside, key=lambda t: abs(t[2] - (hi if t[2] > hi else lo)))
     print(f"  note: '{chart_title}' axis {lo}-{hi} crops {len(days)} day(s), "
@@ -203,13 +258,15 @@ def line_chart(ws, title, y_title, cols, first_row, last_row, ylim=None,
     chart.height, chart.width = height, width
     if ylim:
         chart.y_axis.scaling.min, chart.y_axis.scaling.max, chart.y_axis.majorUnit = ylim
-    for k, (header, name) in enumerate(cols):
+    for k, col in enumerate(cols):
+        header, name = col[0], col[1]
+        slot = col[2] if len(col) > 2 else k     # explicit slot keeps a series' colour
         j = col_index(ws, header)
         if j is None:
             continue
         s = Series(Reference(ws, min_col=j, min_row=first_row, max_row=last_row),
                    title=name)
-        style_series(s, PALETTE[k % len(PALETTE)])
+        style_series(s, PALETTE[slot % len(PALETTE)])
         chart.append(s)
     chart.set_categories(Reference(ws, min_col=1, min_row=first_row, max_row=last_row))
     recede_axes(chart, last_row - first_row + 1)
@@ -284,12 +341,93 @@ def combined_chart(wb, state, elec_col, elec_name, gas_col, gas_name):
     return c1
 
 
-def iter_slots(row=4, pitch=18):
-    """Anchors for a two-column grid of charts, top to bottom."""
-    while True:
-        yield f"B{row}"
-        yield f"L{row}"
-        row += pitch
+class Grid:
+    """A two-column run of charts, top to bottom, broken up by section headings.
+
+    A heading always starts a fresh row, so a section never begins in the right-hand
+    column beside the tail of the one before it - which would put a chart above its own
+    heading and under someone else's.
+    """
+
+    PITCH = 18          # rows a chart occupies, at the 8.2cm chart height
+    HEADING = 3         # heading, standfirst, and a blank row of air beneath
+
+    def __init__(self, ws, row=4):
+        self.ws, self.row, self.right = ws, row, False
+
+    def _newline(self):
+        if self.right:
+            self.row += self.PITCH
+            self.right = False
+
+    def heading(self, text, standfirst):
+        self._newline()
+        if self.row > 4:                    # air above every heading but the first
+            self.row += 1
+        c = self.ws.cell(row=self.row, column=2, value=text)
+        c.font = SECTION_FONT
+        c = self.ws.cell(row=self.row + 1, column=2, value=standfirst)
+        c.font = SUB_FONT
+        self.row += self.HEADING
+
+    def subheading(self, text):
+        self._newline()
+        c = self.ws.cell(row=self.row, column=2, value=text)
+        c.font = SUBSECTION_FONT
+        self.row += 2
+
+    def add(self, chart):
+        self.ws.add_chart(chart, f"{'L' if self.right else 'B'}{self.row}")
+        self.right = not self.right
+        if not self.right:
+            self.row += self.PITCH
+
+
+def year_charts(wb, stem, y_title):
+    """The one-state-per-chart daily charts for STATE_YEAR, or [] if this stem has none."""
+    name = f"{stem} daily"
+    if stem not in PER_STATE or name not in wb.sheetnames:
+        return []
+    title, ylim, groups = PER_STATE[stem]
+    data = wb[name]
+    rows = select_rows(data, ("year", STATE_YEAR))
+    if rows is None:                         # a series that does not reach that year
+        return []
+    first, last = rows
+    charts = []
+    for label, cols in groups:
+        if not any(col_index(data, c[0]) for c in cols):
+            continue
+        chart_title = f"{title} — {label}, {year_label(data, first, last, STATE_YEAR)}"
+        check_ylim(data, cols, first, last, ylim, chart_title, deliberate=False)
+        charts.append(line_chart(data, chart_title, y_title, cols, first, last, ylim=ylim))
+    return charts
+
+
+def frequency_charts(wb, stem, title, y_title, cols, ylim):
+    """Every charted frequency for one series, in the order the variants are declared."""
+    variants = PETROL_VARIANTS if ylim else STANDARD_VARIANTS
+    if stem in NO_DAILY_CHARTS:
+        variants = [v for v in variants if v[0] != "daily"]
+    charts = []
+    for freq, label, selector, ylim_override in variants:
+        name = f"{stem} {freq}"
+        if name not in wb.sheetnames:
+            continue
+        data = wb[name]
+        rows = select_rows(data, selector)
+        if rows is None:                     # a year the series does not reach
+            continue
+        first, last = rows
+        if selector and selector[0] == "year":
+            label = year_label(data, first, last, selector[1])
+        axis = ylim_override or ylim
+        chart_title = f"{title} — {label}"
+        if axis:
+            check_ylim(data, cols, first, last, axis, chart_title,
+                       deliberate=ylim_override is not None)
+        charts.append(line_chart(data, chart_title, y_title, cols, first, last, ylim=axis))
+    return charts
 
 
 def write_charts(wb):
@@ -298,44 +436,38 @@ def write_charts(wb):
     ws["A1"] = "Summary charts"
     ws["A1"].font = TITLE_FONT
     ws["A2"] = ("Each series at every frequency it is charted at, drawn live from the "
-                "data tabs — the "
-                "numbers behind any chart are on the matching tab. Daily is shown for "
-                "gas and petrol over the last two years and the last five, and for "
-                "petrol over 2026 and 2025 separately; electricity starts at monthly, "
-                "because daily spot is too spiky to read at this size. Monthly, "
-                "quarterly and annual show full history. A series "
-                "keeps the same colour across all of its charts. The petrol charts are "
-                "pinned to a fixed 75–350 c/L scale so they can be read against each "
-                "other. The four two-scale charts pair each state's electricity with its "
+                "data tabs — the numbers behind any chart are on the matching tab, and "
+                "the headings below say which. Daily is shown for gas and petrol over "
+                "the last two years and the last five, and for petrol over 2026 and "
+                f"{STATE_YEAR} separately, including one chart per state for {STATE_YEAR}; "
+                "electricity starts at monthly, because daily spot is too spiky to read "
+                "at this size. Monthly, quarterly and annual show full history. A series "
+                "keeps the same colour across all of its charts. The all-frequency petrol "
+                "charts are pinned to a fixed 75–350 c/L scale so they can be read "
+                "against each other; the single-year charts use tighter scales of their "
+                "own. The four two-scale charts pair each state's electricity with its "
                 "own gas hub.")
     ws["A2"].font = SUB_FONT
 
-    slots = iter_slots()
+    grid = Grid(ws)
+    grid.heading("Electricity and gas by state",
+                 "One state's electricity and its own gas hub, quarterly, on two scales. "
+                 "Read the shapes and their timing against each other, not the crossings.")
     for pair in STATE_PAIRS:
-        ws.add_chart(combined_chart(wb, *pair), next(slots))
+        grid.add(combined_chart(wb, *pair))
 
     for stem, title, y_title, cols, ylim in SERIES:
-        variants = PETROL_VARIANTS if ylim else STANDARD_VARIANTS
-        if stem in NO_DAILY_CHARTS:
-            variants = [v for v in variants if v[0] != "daily"]
-        for freq, label, selector, ylim_override in variants:
-            name = f"{stem} {freq}"
-            if name not in wb.sheetnames:
-                continue
-            data = wb[name]
-            rows = select_rows(data, selector)
-            if rows is None:            # a year the series does not reach
-                continue
-            first, last = rows
-            if selector and selector[0] == "year":
-                label = year_label(data, first, last, selector[1])
-            axis = ylim_override or ylim
-            chart_title = f"{title} — {label}"
-            if axis:
-                check_ylim(data, cols, first, last, axis, chart_title,
-                           deliberate=ylim_override is not None)
-            chart = line_chart(data, chart_title, y_title, cols, first, last, ylim=axis)
-            ws.add_chart(chart, next(slots))
+        charts = frequency_charts(wb, stem, title, y_title, cols, ylim)
+        by_state = year_charts(wb, stem, y_title)
+        if not charts and not by_state:      # e.g. retail, in a no-retail build
+            continue
+        grid.heading(*SECTIONS[stem])
+        for chart in charts:
+            grid.add(chart)
+        if by_state:
+            grid.subheading(f"One state per chart — daily, {STATE_YEAR}")
+            for chart in by_state:
+                grid.add(chart)
 
     ws.column_dimensions["A"].width = 2
     return ws
