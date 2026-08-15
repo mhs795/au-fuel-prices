@@ -1,16 +1,16 @@
-"""Aggregate AEMO NEM 'aggregated price and demand' files to daily, monthly and annual
-regional series.
+"""Aggregate AEMO NEM 'aggregated price and demand' files to daily, monthly, quarterly
+and annual regional series.
 
 Each interval's SETTLEMENTDATE is the interval-ENDING timestamp, so one second is
 subtracted before taking the calendar date. That puts the 00:00 interval (which ends at
 midnight) on the day it actually belongs to, and is agnostic to the 30-minute /
 5-minute settlement change of 1 October 2021.
 
-Monthly and annual demand-weighted prices are accumulated from the raw intervals, not
-averaged from the daily figures - an average of daily averages is not a demand-weighted
-average and would quietly misprice volatile months.
+Monthly, quarterly and annual demand-weighted prices are accumulated from the raw
+intervals, not averaged from the daily figures - an average of daily averages is not a
+demand-weighted average and would quietly misprice volatile months.
 
-  build_electricity.py <src_dir> <daily.csv> <monthly.csv> <annual.csv>
+  build_electricity.py <src_dir> <daily.csv> <monthly.csv> <quarterly.csv> <annual.csv>
 """
 import csv, glob, os, sys
 from collections import defaultdict
@@ -32,7 +32,11 @@ def parse_ts(v):
     return None
 
 
-SRC, DAILY, MONTHLY, ANNUAL = sys.argv[1:5]
+SRC, DAILY, MONTHLY, QUARTERLY, ANNUAL = sys.argv[1:6]
+
+
+def quarter_key(iso):
+    return f"{iso[:4]}-Q{(int(iso[5:7]) - 1) // 3 + 1}"
 
 
 def new():
@@ -40,7 +44,8 @@ def new():
             "min": float("inf"), "max": float("-inf"), "dsum": 0.0, "days": set()}
 
 
-acc = {"daily": defaultdict(new), "monthly": defaultdict(new), "annual": defaultdict(new)}
+acc = {"daily": defaultdict(new), "monthly": defaultdict(new),
+       "quarterly": defaultdict(new), "annual": defaultdict(new)}
 unparsed = 0
 files = sorted(glob.glob(os.path.join(SRC, "*.csv")))
 print(f"{len(files)} files", flush=True)
@@ -60,7 +65,8 @@ for fp in files:
             d = (ts - timedelta(seconds=1)).date()
             reg = row["REGION"]
             iso = d.isoformat()
-            for freq, key in (("daily", iso), ("monthly", iso[:7]), ("annual", iso[:4])):
+            for freq, key in (("daily", iso), ("monthly", iso[:7]),
+                              ("quarterly", quarter_key(iso)), ("annual", iso[:4])):
                 a = acc[freq][(reg, key)]
                 a["pq"] += rrp * dem
                 a["q"] += dem
@@ -111,4 +117,5 @@ def write(path, freq, label):
 
 write(DAILY, "daily", "date")
 write(MONTHLY, "monthly", "month")
+write(QUARTERLY, "quarterly", "quarter")
 write(ANNUAL, "annual", "year")

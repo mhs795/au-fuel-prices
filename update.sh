@@ -33,19 +33,23 @@ fi
 
 echo "== 5/5 building series and workbook"
 python3 "$HERE/build_electricity.py" "$WORK/nem" \
-  "$WORK/elec_daily.csv" "$WORK/elec_monthly.csv" "$WORK/elec_annual.csv"
+  "$WORK/elec_daily.csv" "$WORK/elec_monthly.csv" "$WORK/elec_quarterly.csv" \
+  "$WORK/elec_annual.csv"
 python3 "$HERE/build_gas.py" "$WORK/gas/dwgm-prices-and-demand.xlsx" \
   "$WORK/gas/sttm-price-and-withdrawals.xlsx" "$WORK/gas_daily.csv"
-python3 "$HERE/aggregate.py" "$WORK/gas_daily.csv" "$WORK/gas_monthly.csv" "$WORK/gas_annual.csv"
+python3 "$HERE/aggregate.py" "$WORK/gas_daily.csv" "$WORK/gas_monthly.csv" \
+  "$WORK/gas_quarterly.csv" "$WORK/gas_annual.csv"
 
 if [ "${FUEL_NO_RETAIL:-0}" = "1" ]; then
   python3 "$HERE/build_petrol.py" "$WORK/petrol/AIP_TGP.xlsx" "$WORK/tgp_daily.csv"
 else
   python3 "$HERE/build_petrol.py" "$WORK/petrol/AIP_TGP.xlsx" "$WORK/tgp_daily.csv" \
     "$WORK/petrol/fw_daily.csv" "$WORK/petrol/state_daily.csv" "$WORK/retail_daily.csv"
-  python3 "$HERE/aggregate.py" "$WORK/retail_daily.csv" "$WORK/retail_monthly.csv" "$WORK/retail_annual.csv"
+  python3 "$HERE/aggregate.py" "$WORK/retail_daily.csv" "$WORK/retail_monthly.csv" \
+    "$WORK/retail_quarterly.csv" "$WORK/retail_annual.csv"
 fi
-python3 "$HERE/aggregate.py" "$WORK/tgp_daily.csv" "$WORK/tgp_monthly.csv" "$WORK/tgp_annual.csv"
+python3 "$HERE/aggregate.py" "$WORK/tgp_daily.csv" "$WORK/tgp_monthly.csv" \
+  "$WORK/tgp_quarterly.csv" "$WORK/tgp_annual.csv"
 
 if [ -f "$OUT" ]; then cp -p "$OUT" "$WORK/previous_workbook.xlsx"; fi
 if [ "${FUEL_NO_RETAIL:-0}" = "1" ]; then

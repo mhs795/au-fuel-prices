@@ -1,13 +1,15 @@
-"""Roll a daily series up to monthly and annual averages.
+"""Roll a daily series up to monthly, quarterly and annual averages.
 
 Every price column becomes a simple mean of the daily values present in the period -
 days with no value are skipped, not treated as zero. Count columns are handled on their
 own terms: interval and schedule counts are summed, site counts are averaged. An n_days
 column records how many days each period actually rests on, so partial periods (the
-current month, the current year, a month with a source gap) are visible rather than
-silently understated.
+current month, the current quarter, the current year, a month with a source gap) are
+visible rather than silently understated.
 
-  aggregate.py <daily.csv> <monthly.csv> <annual.csv>
+Quarters are calendar quarters, labelled YYYY-Qn, to match the annual tabs.
+
+  aggregate.py <daily.csv> <monthly.csv> <quarterly.csv> <annual.csv>
 """
 import csv, sys
 from collections import defaultdict
@@ -16,18 +18,30 @@ SUM_SUFFIXES = ("_intervals", "_n_schedules")
 SITE_SUFFIXES = ("_sites",)
 
 
+def month_key(iso):
+    return iso[:7]
+
+
+def quarter_key(iso):
+    return f"{iso[:4]}-Q{(int(iso[5:7]) - 1) // 3 + 1}"
+
+
+def year_key(iso):
+    return iso[:4]
+
+
 def load(path):
     with open(path, newline="") as fh:
         r = csv.reader(fh)
         return next(r), list(r)
 
 
-def roll(header, rows, width, label):
+def roll(header, rows, keyfn, label):
     cols = header[1:]
     acc = defaultdict(lambda: defaultdict(lambda: [0.0, 0]))
     days = defaultdict(set)
     for row in rows:
-        key = row[0][:width]
+        key = keyfn(row[0])
         days[key].add(row[0])
         for c, v in zip(cols, row[1:]):
             if v in ("", None):
@@ -66,7 +80,8 @@ def write(path, header, rows):
 
 
 if __name__ == "__main__":
-    daily, monthly, annual = sys.argv[1:4]
+    daily, monthly, quarterly, annual = sys.argv[1:5]
     hdr, rows = load(daily)
-    write(monthly, *roll(hdr, rows, 7, "month"))
-    write(annual, *roll(hdr, rows, 4, "year"))
+    write(monthly, *roll(hdr, rows, month_key, "month"))
+    write(quarterly, *roll(hdr, rows, quarter_key, "quarter"))
+    write(annual, *roll(hdr, rows, year_key, "year"))

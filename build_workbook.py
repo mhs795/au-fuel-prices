@@ -1,8 +1,9 @@
-"""Assemble the daily, monthly and annual series into one formatted Excel workbook.
+"""Assemble the daily, monthly, quarterly and annual series into one formatted Excel
+workbook.
 
   build_workbook.py <work_dir> <out.xlsx> [--no-retail]
 
-Reads {elec,gas,tgp,retail}_{daily,monthly,annual}.csv from the work directory. The
+Reads {elec,gas,tgp,retail}_{daily,monthly,quarterly,annual}.csv from the work directory. The
 retail tabs are omitted entirely when --no-retail is given.
 """
 import csv, os, sys, datetime
@@ -33,8 +34,10 @@ GROUPS = [
      "Unweighted average across reporting sites; coverage differs by state — check the _sites "
      "columns.", "0.00"),
 ]
+# Quarters are written as text (2026-Q1) - Excel has no quarter date format, and a
+# quarter-start date would display as an ordinary month and read as one.
 FREQS = [("daily", "daily", "yyyy-mm-dd"), ("monthly", "monthly", "yyyy-mm"),
-         ("annual", "annual", "0")]
+         ("quarterly", "quarterly", "@"), ("annual", "annual", "0")]
 
 
 def read(path):
@@ -46,6 +49,8 @@ def read(path):
 def key_cell(ws, row, col, raw, freq, fmt):
     if freq == "annual":
         c = ws.cell(row=row, column=col, value=int(raw))
+    elif freq == "quarterly":
+        c = ws.cell(row=row, column=col, value=raw)
     elif freq == "monthly":
         y, m = raw.split("-")
         c = ws.cell(row=row, column=col, value=datetime.date(int(y), int(m), 1))

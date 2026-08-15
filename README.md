@@ -1,7 +1,7 @@
 # AU daily energy & fuel prices
 
 Builds one Excel workbook of Australian **electricity, gas and petrol prices** at daily,
-monthly and annual frequency, entirely from published source files.
+monthly, quarterly and annual frequency, entirely from published source files.
 
 Output: `~/GoogleDrive/WORK/information library/data/AU daily energy and fuel prices.xlsx`
 
@@ -40,9 +40,9 @@ Full method, caveats and exact file URLs are written into the workbook's
 
 - **Nothing is estimated.** Every number traces to a published file. Blanks stay blank —
   no interpolation, no carry-forward, no filling.
-- **Electricity monthly/annual prices are accumulated from the raw dispatch intervals**,
-  not averaged from daily figures; an average of daily averages is not a demand-weighted
-  average.
+- **Electricity monthly/quarterly/annual prices are accumulated from the raw dispatch
+  intervals**, not averaged from daily figures; an average of daily averages is not a
+  demand-weighted average.
 - **Caching is by closed month.** Historical months never change, so they are aggregated
   once and cached under `work/`. Deleting `work/` forces a full rebuild.
 - **The builders fail loudly.** `build_electricity.py` aborts rather than write a series
@@ -58,10 +58,10 @@ Full method, caveats and exact file URLs are written into the workbook's
 | `fetch_aip.py` | AIP terminal gate price workbook (scrapes the weekly link) |
 | `fetch_fuelwatch.py` | FuelWatch WA retail, cached per month |
 | `fetch_state_retail.py` | NSW + QLD retail, price-change events → daily averages |
-| `build_electricity.py` | NEM intervals → daily/monthly/annual |
+| `build_electricity.py` | NEM intervals → daily/monthly/quarterly/annual |
 | `build_gas.py` | AEMO gas workbooks → daily |
 | `build_petrol.py` | AIP + retail sources → daily |
-| `aggregate.py` | generic daily → monthly/annual averaging |
+| `aggregate.py` | generic daily → monthly/quarterly/annual averaging |
 | `notes.py` | content of the Sources & notes tab |
 | `build_workbook.py` | assembles and formats the workbook |
 
