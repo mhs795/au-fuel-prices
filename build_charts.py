@@ -28,25 +28,38 @@ AXIS = "8C8C8C"
 HDR_ROW = 4          # data tabs put their header on row 4
 FIRST_DATA_ROW = 5
 LINE_W = 19050       # ~1.5pt in EMU
-DAILY_WINDOW_DAYS = 365 * 2 + 1
 
 TITLE_FONT = Font(bold=True, size=13, color="1F3864")
 SUB_FONT = Font(italic=True, size=9, color="595959")
 
-# (data tab stem, chart title, y-axis title, [(column header, legend name), ...])
+# The petrol charts are pinned to a common 100-300 c/L scale so that wholesale and
+# retail, and each frequency, can be read against one another without rescaling by eye.
+# Electricity and gas stay auto-scaled - their spikes are orders of magnitude, not
+# percentages, and a fixed range would either flatten them or clip them off.
+PETROL_YLIM = (100, 300)
+
+# (data tab stem, chart title, y-axis title, [(column header, legend name), ...], y-range)
 SERIES = [
     ("Electricity", "Electricity spot price (DWA)", "$/MWh",
      [("NSW1_price_dwa", "NSW"), ("QLD1_price_dwa", "QLD"), ("SA1_price_dwa", "SA"),
-      ("TAS1_price_dwa", "TAS"), ("VIC1_price_dwa", "VIC")]),
+      ("TAS1_price_dwa", "TAS"), ("VIC1_price_dwa", "VIC")], None),
     ("Gas", "Gas wholesale price", "$/GJ",
      [("VIC_DWGM_6am", "VIC DWGM"), ("SYD_exante", "Sydney STTM"),
-      ("ADL_exante", "Adelaide STTM"), ("BRI_exante", "Brisbane STTM")]),
+      ("ADL_exante", "Adelaide STTM"), ("BRI_exante", "Brisbane STTM")], None),
     ("Petrol TGP", "Petrol wholesale TGP, national", "cents/litre",
-     [("TGP_petrol_national", "Petrol"), ("TGP_diesel_national", "Diesel")]),
+     [("TGP_petrol_national", "Petrol"), ("TGP_diesel_national", "Diesel")], PETROL_YLIM),
     ("Petrol retail", "Retail ULP pump price", "cents/litre",
-     [("NSW_ULP", "NSW"), ("QLD_ULP", "QLD"), ("WA_ULP", "WA")]),
+     [("NSW_ULP", "NSW"), ("QLD_ULP", "QLD"), ("WA_ULP", "WA")], PETROL_YLIM),
 ]
-FREQS = ["daily", "monthly", "quarterly", "annual"]
+
+# (data tab frequency, chart label, trailing window in years - None for full history)
+VARIANTS = [
+    ("daily", "daily, last 2 years", 2),
+    ("daily", "daily, last 5 years", 5),
+    ("monthly", "monthly", None),
+    ("quarterly", "quarterly", None),
+    ("annual", "annual", None),
+]
 
 
 def col_index(ws, header):
@@ -57,10 +70,10 @@ def col_index(ws, header):
     return None
 
 
-def daily_start_row(ws):
+def daily_start_row(ws, years):
     """First row within the trailing window, so daily charts stay legible."""
     last = ws.cell(row=ws.max_row, column=1).value
-    cutoff = last.toordinal() - DAILY_WINDOW_DAYS
+    cutoff = last.toordinal() - round(365.25 * years)
     lo, hi = FIRST_DATA_ROW, ws.max_row
     while lo < hi:
         mid = (lo + hi) // 2
@@ -104,12 +117,14 @@ def recede_axes(chart, n_points):
         p=[Paragraph(pPr=ParagraphProperties(defRPr=small), endParaRPr=small)])
 
 
-def line_chart(ws, title, y_title, cols, first_row, last_row,
+def line_chart(ws, title, y_title, cols, first_row, last_row, ylim=None,
                width=15.5, height=8.2):
     chart = LineChart()
     chart.title = title
     chart.y_axis.title = y_title
     chart.height, chart.width = height, width
+    if ylim:
+        chart.y_axis.scaling.min, chart.y_axis.scaling.max = ylim
     for k, (header, name) in enumerate(cols):
         j = col_index(ws, header)
         if j is None:
@@ -185,9 +200,10 @@ def write_charts(wb):
     ws["A1"] = "Summary charts"
     ws["A1"].font = TITLE_FONT
     ws["A2"] = ("Every series at each frequency, drawn live from the data tabs — the "
-                "numbers behind any chart are on the matching tab. Daily charts show the "
-                "last two years only; monthly, quarterly and annual show full history. "
-                "A series keeps the same colour across all of its charts.")
+                "numbers behind any chart are on the matching tab. Daily is shown over "
+                "the last two years and the last five; monthly, quarterly and annual show "
+                "full history. A series keeps the same colour across all of its charts. "
+                "The petrol charts are pinned to a fixed 100–300 c/L scale.")
     ws["A2"].font = SUB_FONT
 
     row, col = 4, 0
@@ -195,16 +211,15 @@ def write_charts(wb):
     ws.add_chart(combined_chart(wb), "B4")
     row += 21
 
-    for stem, title, y_title, cols in SERIES:
-        for freq in FREQS:
+    for stem, title, y_title, cols, ylim in SERIES:
+        for freq, label, window in VARIANTS:
             name = f"{stem} {freq}"
             if name not in wb.sheetnames:
                 continue
             data = wb[name]
-            first = daily_start_row(data) if freq == "daily" else FIRST_DATA_ROW
-            suffix = ", last 2 years" if freq == "daily" else ""
-            chart = line_chart(data, f"{title} — {freq}{suffix}", y_title, cols,
-                               first, data.max_row)
+            first = daily_start_row(data, window) if window else FIRST_DATA_ROW
+            chart = line_chart(data, f"{title} — {label}", y_title, cols,
+                               first, data.max_row, ylim=ylim)
             ws.add_chart(chart, f"{'B' if col == 0 else 'L'}{row}")
             col += 1
             if col == 2:
