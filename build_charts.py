@@ -51,11 +51,14 @@ SERIES = [
     ("Gas", "Gas wholesale price", "$/GJ",
      [("VIC_DWGM_6am", "VIC DWGM"), ("SYD_exante", "Sydney STTM"),
       ("ADL_exante", "Adelaide STTM"), ("BRI_exante", "Brisbane STTM"),
-      # The hub sits on the same axis as the markets it competes with, which is the
-      # point of putting it here: Wallumbilla against Brisbane STTM is a real
-      # comparison. Its slots continue after the four above so no colour is reused.
-      ("GSH_WAL_price", "Wallumbilla GSH", 4),
-      ("GSH_SEQ_price", "SEQ GSH", 5)], None),
+      # Wallumbilla sits on the same axis as the markets it competes with, which is
+      # the point of putting it here: it is an upstream traded price against city-gate
+      # clearing prices, and the comparison is the information. Its slot continues
+      # after the four above so no colour is reused.
+      # The hub's SEQ location is deliberately NOT charted. It trades on 77% of days,
+      # correlates 0.91 with Brisbane STTM sitting about 40c below it, and so mostly
+      # redraws the Brisbane line with holes in it. The columns stay on the data tabs.
+      ("GSH_WAL_price", "Wallumbilla GSH", 4)], None),
     ("Petrol TGP", "Petrol wholesale TGP, national", "cents/litre",
      [("TGP_petrol_national", "Petrol"), ("TGP_diesel_national", "Diesel")], PETROL_YLIM),
     ("Petrol retail", "Retail ULP pump price", "cents/litre",
@@ -115,8 +118,9 @@ SECTIONS = {
                     "— daily spot is too spiky to read at this size."),
     "Gas": ("Gas",
             "Victorian DWGM schedule prices, the three STTM hub ex-ante prices, and the "
-            "Gas Supply Hub, $/GJ. The hub's data starts in 2026, so it is a short line "
-            "at the right-hand end of the longer charts and absent from the annual one."),
+            "Gas Supply Hub at Wallumbilla, $/GJ. The hub's data starts in 2026, so it "
+            "is a short line at the right-hand end of the longer charts and absent from "
+            "the annual one. The hub's SEQ prices are on the data tabs, not charted."),
     "Petrol TGP": ("Petrol — wholesale (terminal gate)",
                    "AIP terminal gate prices, cents per litre, business days only. The "
                    "cost side of the pump price, before retail margin and the discount "
