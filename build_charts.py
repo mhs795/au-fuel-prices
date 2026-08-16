@@ -5,12 +5,23 @@ a chart can never drift from the numbers it claims to show. Rebuilding the workb
 rebuilds the charts from the same source rows.
 
 Colours are a fixed categorical order, assigned per series and never cycled: a series
-keeps its colour across every chart it appears in, so NSW is the same blue on the daily,
-monthly, quarterly and annual electricity charts. The palette was validated for
-colour-vision deficiency separation (worst adjacent pair dE 9.1 protan, normal-vision
-19.6). Three of the five slots sit under 3:1 contrast on white, which is acceptable here
-because identity never rests on colour alone - every chart carries a legend, and the
-underlying table is one tab away.
+keeps its colour across every chart it appears in, so NSW is the same navy on the daily,
+monthly, quarterly and annual electricity charts.
+
+The palette is taken from the Commonwealth Budget papers - sampled directly out of the
+vector graphics in Budget Paper No. 1 2026-27, Statements 2 and 7, not eyeballed - so
+these charts sit alongside Budget material without looking foreign. Gridline, axis and
+heading greys come from the same source.
+
+The honest cost of that choice: the Budget palette is built for charts carrying two or
+three series, and these carry five or six, so it is being stretched. Measured separation
+falls from the previous palette's worst pair of dE 39.6 (normal vision) and 28.6
+(protanopia) to dE 18.9 and 15.5 here, the weak pair being navy 002A54 against indigo
+212F73. That is still readable, but it is roughly half the headroom. It is acceptable
+only because identity never rests on colour alone - every chart carries a legend, series
+are ordered consistently, and the underlying table is one tab away. If these charts ever
+need to work for someone reading them at a distance or with a colour-vision deficiency,
+switch PALETTE back to the categorical set kept in PALETTE_CVD below.
 """
 from openpyxl.chart import LineChart, Reference, Series
 from openpyxl.chart.axis import ChartLines
@@ -21,18 +32,24 @@ from openpyxl.drawing.text import (CharacterProperties, Paragraph, ParagraphProp
                                    RichTextProperties)
 from openpyxl.styles import Font
 
-# Validated categorical palette, in fixed slot order.
-PALETTE = ["2A78D6", "EB6834", "1BAF7A", "EDA100", "E87BA4", "008300", "4A3AA7", "E34948"]
-GRID = "E8E8E6"
-AXIS = "8C8C8C"
+# Commonwealth Budget palette, sampled from the vector graphics of Budget Paper No. 1
+# 2026-27 (Statements 2 and 7). Ordered for maximum separation: navy, bright blue, green,
+# teal, indigo - chosen by measuring every 5-subset rather than by eye.
+PALETTE = ["002A54", "417AE4", "5B9866", "338E8B", "212F73", "626A77", "003E18", "293F5B"]
+# The previous palette, kept because it separates far better when more than three series
+# share a chart - see the note in the module docstring. Swap PALETTE = PALETTE_CVD to use it.
+PALETTE_CVD = ["2A78D6", "EB6834", "1BAF7A", "EDA100", "E87BA4", "008300", "4A3AA7", "E34948"]
+GRID = "E1E3E6"      # Budget gridline grey
+AXIS = "626A77"      # Budget axis and axis-label grey
+INK = "002A54"       # Budget heading navy
 HDR_ROW = 4          # data tabs put their header on row 4
 FIRST_DATA_ROW = 5
 LINE_W = 19050       # ~1.5pt in EMU
 
-TITLE_FONT = Font(bold=True, size=13, color="1F3864")
-SECTION_FONT = Font(bold=True, size=12, color="1F3864")
-SUBSECTION_FONT = Font(bold=True, size=10, color="595959")
-SUB_FONT = Font(italic=True, size=9, color="595959")
+TITLE_FONT = Font(bold=True, size=13, color=INK)
+SECTION_FONT = Font(bold=True, size=12, color=INK)
+SUBSECTION_FONT = Font(bold=True, size=10, color=AXIS)
+SUB_FONT = Font(italic=True, size=9, color=AXIS)
 
 # The petrol charts are pinned to a common scale so that wholesale and retail, and each
 # frequency, can be read against one another without rescaling by eye. The band is set
@@ -356,7 +373,10 @@ def combined_chart(wb, state, elec_col, elec_name, gas_col, gas_name):
     c2.y_axis.spPr = GraphicalProperties(ln=LineProperties(solidFill=AXIS, w=9525))
     s = Series(Reference(gas, min_col=col_index(gas, gas_col), min_row=g0, max_row=g1),
                title=f"{gas_name} ($/GJ, right)")
-    style_series(s, PALETTE[1])
+    # Green, not the adjacent blue: on the Budget palette slots 0 and 1 are both blues,
+    # and two blues on a two-scale chart is exactly where a reader stops being able to
+    # tell which line belongs to which axis.
+    style_series(s, PALETTE[2])
     c2.append(s)
 
     # Draws the gas axis on the right. This must be set on the secondary axis: setting
