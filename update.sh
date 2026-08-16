@@ -82,6 +82,11 @@ fi
 python3 "$HERE/aggregate.py" "$WORK/tgp_daily.csv" "$WORK/tgp_monthly.csv" \
   "$WORK/tgp_quarterly.csv" "$WORK/tgp_annual.csv"
 
+# Check the invariants the workbook's own notes tab claims, BEFORE building and
+# publishing. A broken invariant here means a source changed shape and the series is
+# carrying numbers nobody measured.
+python3 "$HERE/verify.py" "$WORK"
+
 if [ -f "$OUT" ]; then cp -p "$OUT" "$WORK/previous_workbook.xlsx"; fi
 if [ "${FUEL_NO_RETAIL:-0}" = "1" ]; then
   python3 "$HERE/build_workbook.py" "$WORK" "$WORK/AU daily energy and fuel prices.xlsx" --no-retail
