@@ -26,7 +26,7 @@ COUNT_SUFFIXES = ("_intervals", "_n_schedules", "_sites", "n_days", "_qty_GJ")
 GROUPS = [
     ("elec", "Electricity", "Electricity — NEM regional spot prices", "$/MWh, GST exclusive. "
      "dwa = demand-weighted average. Source: AEMO aggregated price and demand data.", "0.00"),
-    ("gas", "Gas", "Gas — east coast wholesale market prices", "$/GJ. Victorian DWGM schedule "
+    ("gas", "Gas", "Gas — east coast wholesale market prices", "$/GJ, GST exclusive. Victorian DWGM schedule "
      "prices, STTM hub ex-ante/ex-post prices, and Gas Supply Hub traded prices and "
      "volumes at Wallumbilla and SEQ (2026 on). Source: AEMO.", "0.0000"),
     ("tgp", "Petrol TGP", "Petrol — wholesale terminal gate prices", "Cents per litre, GST "
