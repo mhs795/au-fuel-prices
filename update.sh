@@ -49,6 +49,16 @@ python3 "$HERE/fetch_gsh.py" "$WORK/gas/gsh_cache" "$WORK/gsh_daily.csv"
 # only ever extends the series past the workbooks' end, so revisions still come from them.
 python3 "$HERE/fetch_gas_current.py" "$WORK/gas/mibb_cache" "$WORK/gas_current.csv"
 
+# Mirror the hub cache off this machine on every run. Tracking it in git protects it only
+# as often as someone remembers to commit, and a local commit does not survive the disk
+# failing - but this data has no upstream to re-fetch from once it rolls off nemweb, so
+# "remember to back it up" is not good enough. The destination is the Drive folder, which
+# syncs, and the copy is additive: files are immutable, so nothing is ever overwritten.
+GSH_BACKUP="$DEST/gsh_cache_backup"
+mkdir -p "$GSH_BACKUP"
+cp -n "$WORK/gas/gsh_cache/"*.zip "$GSH_BACKUP/" 2>/dev/null || true
+echo "   gas supply hub cache: $(ls "$WORK/gas/gsh_cache" | wc -l) files, $(ls "$GSH_BACKUP" | wc -l) mirrored to Drive"
+
 echo "== 3/5 AIP terminal gate prices"
 python3 "$HERE/fetch_aip.py" "$WORK/petrol/AIP_TGP.xlsx"
 
