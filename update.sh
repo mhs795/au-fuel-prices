@@ -6,6 +6,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="${FUEL_WORK:-$HERE/work}"
 DEST="${FUEL_DEST:-$HOME/GoogleDrive/WORK/information library/data}"
 OUT="$DEST/AU daily energy and fuel prices.xlsx"
+LOCAL_OUT="$HERE/AU daily energy and fuel prices.xlsx"
 UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36'
 
 mkdir -p "$WORK/nem" "$WORK/gas" "$WORK/petrol"
@@ -49,15 +50,28 @@ python3 "$HERE/fetch_gsh.py" "$WORK/gas/gsh_cache" "$WORK/gsh_daily.csv"
 # only ever extends the series past the workbooks' end, so revisions still come from them.
 python3 "$HERE/fetch_gas_current.py" "$WORK/gas/mibb_cache" "$WORK/gas_current.csv"
 
-# Mirror the hub cache off this machine on every run. Tracking it in git protects it only
-# as often as someone remembers to commit, and a local commit does not survive the disk
-# failing - but this data has no upstream to re-fetch from once it rolls off nemweb, so
-# "remember to back it up" is not good enough. The destination is the Drive folder, which
-# syncs, and the copy is additive: files are immutable, so nothing is ever overwritten.
-GSH_BACKUP="$DEST/gsh_cache_backup"
-mkdir -p "$GSH_BACKUP"
-cp -n "$WORK/gas/gsh_cache/"*.zip "$GSH_BACKUP/" 2>/dev/null || true
-echo "   gas supply hub cache: $(ls "$WORK/gas/gsh_cache" | wc -l) files, $(ls "$GSH_BACKUP" | wc -l) mirrored to Drive"
+# Keep the hub cache backed up OFF this machine. It has no upstream: once a day rolls off
+# nemweb's ~95-day window it exists nowhere else, so leaving it on one disk is not safe.
+# git is the backup - the files are small and immutable - but only if something actually
+# commits them, so the build does it rather than relying on anyone remembering.
+if git -C "$HERE" rev-parse --git-dir >/dev/null 2>&1; then
+  if [ -n "$(git -C "$HERE" status --porcelain -- work/gas/gsh_cache)" ]; then
+    n=$(git -C "$HERE" status --porcelain -- work/gas/gsh_cache | wc -l)
+    git -C "$HERE" add -- work/gas/gsh_cache
+    git -C "$HERE" commit -q -m "Gas Supply Hub cache: $n new file(s) to $(date +%Y-%m-%d)" \
+      -- work/gas/gsh_cache
+    # Push is best-effort: no network should not fail a build, but an unpushed cache is
+    # only as safe as this disk, so say so loudly.
+    if git -C "$HERE" push -q origin HEAD 2>/dev/null; then
+      echo "   gas supply hub cache: $n new file(s) committed and pushed"
+    else
+      echo "   !! gas supply hub cache: $n new file(s) committed but NOT PUSHED -" >&2
+      echo "   !! this data exists only on this disk until you push" >&2
+    fi
+  else
+    echo "   gas supply hub cache: no new files, $(ls "$WORK/gas/gsh_cache" | wc -l) tracked"
+  fi
+fi
 
 echo "== 3/5 AIP terminal gate prices"
 python3 "$HERE/fetch_aip.py" "$WORK/petrol/AIP_TGP.xlsx"
@@ -121,5 +135,9 @@ if [ "$built_size" != "$copied_size" ]; then
 fi
 mv "$TMP" "$OUT"
 trap - EXIT
-rm -f "$BUILT"
+# Two copies on purpose: the Drive one to share and read, a local one that does not
+# depend on the mount being up. The local copy IS the build output, so it is moved
+# rather than re-copied.
+mv "$BUILT" "$LOCAL_OUT"
 echo "done -> $OUT"
+echo "     -> $LOCAL_OUT"

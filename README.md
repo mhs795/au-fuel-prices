@@ -89,6 +89,6 @@ ln -sf "$PWD/PRICES" ~/.local/bin/PRICES
 ln -sf "$PWD/PRICES" ~/.local/bin/prices
 ```
 
-`PRICES` expects the scripts at `~/Documents/Work/au_fuel_prices/`; edit `SCRIPT` at the
+`PRICES` expects the scripts at `~/au_fuel_prices/`; edit `SCRIPT` at the
 top of the wrapper if they live elsewhere. Set `FUEL_DEST` to change where the workbook
 is written.

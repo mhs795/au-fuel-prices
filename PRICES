@@ -4,10 +4,10 @@
 #   PRICES              everything, including the retail pump price tab
 #   PRICES NO RETAIL    skip retail; the workbook is built without that tab
 #
-# Thin wrapper around ~/Documents/Work/au_fuel_prices/update.sh.
+# Thin wrapper around ~/au_fuel_prices/update.sh.
 set -euo pipefail
 
-SCRIPT="$HOME/Documents/Work/au_fuel_prices/update.sh"
+SCRIPT="$HOME/au_fuel_prices/update.sh"
 export FUEL_NO_RETAIL=0
 pass=()
 
