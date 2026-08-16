@@ -10,6 +10,28 @@ UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrom
 
 mkdir -p "$WORK/nem" "$WORK/gas" "$WORK/petrol"
 
+# One build at a time. Two runs share $WORK and the per-month caches, and they collide on
+# the same <month>.state.json.tmp - one renames it, the other dies on a missing file, and
+# the cached retail chain is left half-rebuilt.
+exec 9>"$WORK/.lock"
+if ! flock -n 9; then
+  echo "another build is already running (lock: $WORK/.lock) - not starting a second" >&2
+  exit 1
+fi
+
+# Fail before the downloads, not after them: this is 5-10 minutes of fetching and the
+# destination is usually an rclone mount that may simply not be up.
+if [ ! -d "$DEST" ]; then
+  echo "destination directory missing: $DEST" >&2
+  echo "is the Google Drive mount up?  mount | grep GoogleDrive" >&2
+  exit 1
+fi
+if ! touch "$DEST/.write-test" 2>/dev/null; then
+  echo "destination is not writable: $DEST" >&2
+  exit 1
+fi
+rm -f "$DEST/.write-test"
+
 echo "== 1/5 AEMO NEM monthly price files (incremental)"
 python3 "$HERE/fetch_nem.py" "$WORK/nem"
 
@@ -66,5 +88,23 @@ if [ "${FUEL_NO_RETAIL:-0}" = "1" ]; then
 else
   python3 "$HERE/build_workbook.py" "$WORK" "$WORK/AU daily energy and fuel prices.xlsx"
 fi
-mv "$WORK/AU daily energy and fuel prices.xlsx" "$OUT"
+# Publish atomically. $WORK and $DEST are different filesystems (the destination is an
+# rclone mount), so a plain mv degrades to a copy written straight to the final path - an
+# interruption mid-copy leaves a truncated workbook where the published one used to be.
+# Copy to a temp file ON the destination first, verify it, then rename within that
+# filesystem, which is atomic.
+BUILT="$WORK/AU daily energy and fuel prices.xlsx"
+TMP="$DEST/.AU daily energy and fuel prices.xlsx.tmp-$$"
+trap 'rm -f "$TMP"' EXIT
+cp "$BUILT" "$TMP"
+sync "$TMP" 2>/dev/null || true
+built_size=$(stat -c%s "$BUILT")
+copied_size=$(stat -c%s "$TMP")
+if [ "$built_size" != "$copied_size" ]; then
+  echo "publish aborted: copied $copied_size bytes, expected $built_size - $OUT left unchanged" >&2
+  exit 1
+fi
+mv "$TMP" "$OUT"
+trap - EXIT
+rm -f "$BUILT"
 echo "done -> $OUT"

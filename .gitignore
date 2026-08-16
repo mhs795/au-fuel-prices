@@ -1,5 +1,16 @@
-# Cached source data and generated outputs - all rebuildable with ./update.sh
-work/
+# Cached source data and generated outputs - all rebuildable with ./update.sh,
+# with one exception: work/gas/gsh_cache is NOT rebuildable. AEMO publishes only a
+# rolling 30-day window of Gas Supply Hub trades and nemweb keeps ~95 daily files, so
+# that cache is the only copy of every day that has already rolled off. It is small
+# (a few hundred KB of immutable zips) and is tracked deliberately.
+#
+# git will not descend into an excluded directory, so each parent level has to be
+# re-included explicitly - excluding work/ outright would make the negation below dead.
+work/*
+!work/gas/
+work/gas/*
+!work/gas/gsh_cache/
+
 *.xlsx
 *.csv
 __pycache__/
