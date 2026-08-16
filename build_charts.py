@@ -5,20 +5,15 @@ a chart can never drift from the numbers it claims to show. Rebuilding the workb
 rebuilds the charts from the same source rows.
 
 Colours are a fixed categorical order, assigned per series and never cycled: a series
-keeps its colour across every chart it appears in, so NSW is the same navy on the daily,
-monthly, quarterly and annual electricity charts.
-
-The palette was validated for colour-vision deficiency separation (worst pair dE 39.6
-normal vision, 28.6 protanopia). Identity never rests on colour alone in any case - every
-chart carries a legend, and the underlying table is one tab away.
-
-Axis titles sit horizontally above their axis rather than rotated alongside it, and value
-axis labels carry no decimals. Both are readability choices: a rotated title forces the
-reader to tilt their head, and "$120.00" tells them nothing "$120" does not.
+keeps its colour across every chart it appears in, so NSW is the same blue on the daily,
+monthly, quarterly and annual electricity charts. The palette was validated for
+colour-vision deficiency separation (worst adjacent pair dE 9.1 protan, normal-vision
+19.6). Three of the five slots sit under 3:1 contrast on white, which is acceptable here
+because identity never rests on colour alone - every chart carries a legend, and the
+underlying table is one tab away.
 """
 from openpyxl.chart import LineChart, Reference, Series
 from openpyxl.chart.axis import ChartLines
-from openpyxl.chart.layout import Layout, ManualLayout
 from openpyxl.chart.shapes import GraphicalProperties
 from openpyxl.chart.text import RichText
 from openpyxl.drawing.line import LineProperties
@@ -26,19 +21,16 @@ from openpyxl.drawing.text import (CharacterProperties, Paragraph, ParagraphProp
                                    RichTextProperties)
 from openpyxl.styles import Font
 
-# Validated categorical palette, in fixed slot order. Chosen for separation rather than
-# house style: these charts carry five or six series, which is more than a document
-# palette is usually built for.
+# Validated categorical palette, in fixed slot order.
 PALETTE = ["2A78D6", "EB6834", "1BAF7A", "EDA100", "E87BA4", "008300", "4A3AA7", "E34948"]
 GRID = "E8E8E6"
 AXIS = "8C8C8C"
-INK = "1F3864"
 HDR_ROW = 4          # data tabs put their header on row 4
 FIRST_DATA_ROW = 5
 LINE_W = 19050       # ~1.5pt in EMU
 
-TITLE_FONT = Font(bold=True, size=13, color=INK)
-SECTION_FONT = Font(bold=True, size=12, color=INK)
+TITLE_FONT = Font(bold=True, size=13, color="1F3864")
+SECTION_FONT = Font(bold=True, size=12, color="1F3864")
 SUBSECTION_FONT = Font(bold=True, size=10, color="595959")
 SUB_FONT = Font(italic=True, size=9, color="595959")
 
@@ -207,34 +199,14 @@ def style_series(s, colour):
     s.marker.symbol = "none"
 
 
-def flatten_axis_title(axis):
-    """Put the value-axis title horizontally ABOVE the axis instead of rotated beside it.
-
-    Excel's default is to rotate a y-axis title 90 degrees and centre it down the side,
-    which makes the reader tilt their head to read two characters like "$/MWh". Budget and
-    statistical publications park the unit above the axis instead, horizontal. Two parts:
-    rot=0 with vert="horz" stops the rotation, and a manual layout pins it to the top-left
-    corner, because once it is horizontal Excel would otherwise still centre it vertically.
-    """
-    t = axis.title
-    if t is None:
-        return
-    body = t.tx.rich.bodyPr
-    body.rot = 0
-    body.vert = "horz"
-    # x/y are fractions of the chart area from its top-left corner, so this sits just
-    # above the plot and hard left, where the axis begins.
-    t.layout = Layout(manualLayout=ManualLayout(
-        xMode="edge", yMode="edge", x=0.01, y=0.02))
-
-
 def whole_numbers(axis):
-    """Drop decimals from tick labels.
+    """Drop decimals from a value axis's tick labels.
 
-    sourceLinked must be off or Excel ignores formatCode and keeps inheriting the cell
-    format from the data, which is where the decimals were coming from.
+    Setting the format code alone does nothing: sourceLinked defaults to inheriting the
+    number format of the cells the series points at, which is where the decimals were
+    coming from. openpyxl writes sourceLinked="0" when numFmt is given a plain string.
     """
-    axis.numFmt = "0"   # openpyxl expands this to formatCode="0", sourceLinked=False
+    axis.numFmt = "0"
 
 
 def recede_axes(chart, n_points):
@@ -259,9 +231,6 @@ def recede_axes(chart, n_points):
     # cannot tell which period a label belongs to once labels are being skipped.
     chart.x_axis.majorTickMark = "out"
     chart.y_axis.majorTickMark = "out"
-    # Titles read horizontally above the axis, and tick labels carry no decimals.
-    flatten_axis_title(chart.y_axis)
-    flatten_axis_title(chart.x_axis)
     whole_numbers(chart.y_axis)
     skip = max(1, n_points // 8)
     chart.x_axis.tickLblSkip = skip
@@ -398,9 +367,7 @@ def combined_chart(wb, state, elec_col, elec_name, gas_col, gas_name):
     c2.y_axis.spPr = GraphicalProperties(ln=LineProperties(solidFill=AXIS, w=9525))
     s = Series(Reference(gas, min_col=col_index(gas, gas_col), min_row=g0, max_row=g1),
                title=f"{gas_name} ($/GJ, right)")
-    # Slot 2, not the adjacent slot 1: on a two-scale chart the two lines must be told
-    # apart at a glance, since each belongs to a different axis.
-    style_series(s, PALETTE[2])
+    style_series(s, PALETTE[1])
     c2.append(s)
 
     # Draws the gas axis on the right. This must be set on the secondary axis: setting
@@ -413,7 +380,6 @@ def combined_chart(wb, state, elec_col, elec_name, gas_col, gas_name):
     c2.y_axis.axPos = "r"
     c2.y_axis.tickLblPos = "nextTo"
     c2.y_axis.majorTickMark = "out"
-    flatten_axis_title(c2.y_axis)
     whole_numbers(c2.y_axis)
     c2.x_axis.axPos = "b"
     c2.x_axis.delete = True
