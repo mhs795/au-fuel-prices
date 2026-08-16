@@ -207,6 +207,20 @@ def recede_axes(chart, n_points):
     for ax in (chart.x_axis, chart.y_axis):
         ax.delete = False
         ax.spPr = GraphicalProperties(ln=LineProperties(solidFill=AXIS, w=9525))
+    # openpyxl defaults BOTH axes to axPos "l", which is invalid - the category axis
+    # belongs at the bottom. Excel on the desktop honours what the file says and lays the
+    # chart out from it, so the category labels end up fighting the value axis and its
+    # title. Web and phone viewers re-layout and hide the problem, which is why this only
+    # showed up in Office. Setting each axis to its real position fixes it.
+    chart.x_axis.axPos = "b"
+    chart.y_axis.axPos = "l"
+    # Be explicit about label placement too, rather than leaving Excel to infer it.
+    chart.x_axis.tickLblPos = "nextTo"
+    chart.y_axis.tickLblPos = "nextTo"
+    # Real tick marks: without them a slanted label has nothing to point at, so a reader
+    # cannot tell which period a label belongs to once labels are being skipped.
+    chart.x_axis.majorTickMark = "out"
+    chart.y_axis.majorTickMark = "out"
     skip = max(1, n_points // 8)
     chart.x_axis.tickLblSkip = skip
     chart.x_axis.tickMarkSkip = skip
@@ -349,6 +363,14 @@ def combined_chart(wb, state, elec_col, elec_name, gas_col, gas_name):
     # it on the primary instead moves the electricity axis across, leaving each title on
     # the opposite side from its own scale.
     c2.y_axis.crosses = "max"
+    # Same axPos correction as recede_axes makes, for the axes this chart owns itself: the
+    # gas scale genuinely is on the right, and c2's own category axis is the hidden
+    # duplicate that carries the pairing, so it is deleted rather than drawn twice.
+    c2.y_axis.axPos = "r"
+    c2.y_axis.tickLblPos = "nextTo"
+    c2.y_axis.majorTickMark = "out"
+    c2.x_axis.axPos = "b"
+    c2.x_axis.delete = True
     c1 += c2
     c1.legend.position = "b"
     c1.legend.overlay = False
