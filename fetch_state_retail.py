@@ -18,6 +18,10 @@ CACHE = os.path.join(os.path.dirname(os.path.abspath(OUT)), "state_cache")
 STALE_DAYS = 30
 FIELDS = ["date", "state", "product", "mean_price_cpl", "n_sites"]
 
+# Rows the readers could not use, counted per month so a source format change shows up
+# as a loud number rather than as prices quietly carried forward over the gap.
+DROPS = defaultdict(int)
+
 NSW_PKG = "https://data.nsw.gov.au/data/api/3/action/package_show?id=a97a46fc-2bdd-4b90-ac7f-0cb1e8d7ac3b"
 QLD_SEARCH = "https://www.data.qld.gov.au/api/3/action/package_search?q=%22Fuel+price+reporting%22&rows=30"
 MONTHS = {m.lower(): i for i, m in enumerate(calendar.month_name) if m}
@@ -26,6 +30,50 @@ MONTHS.update({m.lower(): i for i, m in enumerate(calendar.month_abbr) if m})
 # Source fuel labels -> the common labels used in the workbook
 NSW_FUEL = {"U91": "ULP", "E10": "E10", "P95": "PULP95", "P98": "PULP98",
             "DL": "Diesel", "PDL": "Diesel_premium", "LPG": "LPG"}
+
+
+def norm_key(k):
+    """Fold a source column name to a stable lookup key.
+
+    Queensland has published the same column as both Fuel_Type and 'Fuel Type', and
+    SiteId as both SiteId and 'Site Id'. Looking the raw name up directly meant a file
+    with spaces matched nothing and every row in it was silently skipped.
+    """
+    return re.sub(r"[^a-z0-9]+", "_", (k or "").strip().lower()).strip("_")
+
+
+# The NSW archive is not consistent: most months are 24-hour, but the 2019-2023 xlsx
+# files are 12-hour with an AM/PM suffix ("1/04/2019 12:08:43 AM"). Uppercased before
+# matching so %p takes a lowercase "am" too.
+TS_FORMATS = (
+    "%d/%m/%Y %I:%M:%S %p", "%d/%m/%Y %I:%M %p",
+    "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y",
+    "%Y-%m-%d %I:%M:%S %p", "%Y-%m-%d %I:%M %p",
+    "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d",
+)
+
+
+def parse_dt(s):
+    """Parse a source timestamp to a naive datetime, or None.
+
+    Sources vary across the archive: ISO separated by a space or by a T, and d/m/Y with
+    the day either zero-padded or not. Parsing the whole string rather than slicing a
+    fixed width is what makes unpadded days work - an earlier s[:10] slice left a
+    trailing space on every 1st-9th of the month and dropped all of them.
+    """
+    s = (s or "").strip()
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s.replace("T", " "))
+    except ValueError:
+        pass
+    for fmt in TS_FORMATS:
+        try:
+            return datetime.strptime(s.upper(), fmt)
+        except ValueError:
+            continue
+    return None
 
 
 def qld_fuel(name):
@@ -131,43 +179,45 @@ def read_nsw(raw):
             continue
         ts = r[ix["PriceUpdatedDate"]]
         if hasattr(ts, "date"):
-            d = ts.date()
+            d = ts.date()                       # NSW timestamps are already local time
         else:
-            s = str(ts)[:19]
-            try:
-                d = datetime.strptime(s, "%Y-%m-%d %H:%M:%S").date()
-            except ValueError:
-                try:
-                    d = datetime.strptime(s[:10], "%d/%m/%Y").date()
-                except ValueError:
-                    continue
+            dt = parse_dt(str(ts))
+            if dt is None:
+                DROPS["NSW bad timestamp"] += 1
+                continue
+            d = dt.date()
         site = f"{r[ix['ServiceStationName']]}|{r[ix['Address']]}"
         yield d, site, fuel, price
 
 
 def read_qld(raw):
     txt = raw.decode("utf-8-sig", errors="replace")
-    for r in csv.DictReader(io.StringIO(txt)):
-        fuel = qld_fuel(r.get("Fuel_Type"))
+    rdr = csv.DictReader(io.StringIO(txt))
+    if rdr.fieldnames:
+        have = {norm_key(k) for k in rdr.fieldnames}
+        missing = {"fuel_type", "price", "transactiondateutc"} - have
+        if missing:
+            raise ValueError(f"unexpected QLD columns, missing {sorted(missing)}: "
+                             f"{rdr.fieldnames}")
+    for raw_row in rdr:
+        r = {norm_key(k): v for k, v in raw_row.items()}
+        fuel = qld_fuel(r.get("fuel_type"))
         if not fuel:
-            continue
+            continue                              # E85, OPAL and friends, deliberately
         try:
-            price = float(r["Price"]) / 10.0      # published in tenths of a cent
+            price = float(r["price"]) / 10.0       # published in tenths of a cent
         except (TypeError, ValueError, KeyError):
+            DROPS["QLD bad price"] += 1
             continue
         if not (20 <= price <= 600):
+            DROPS["QLD price out of range"] += 1
             continue
-        raw_ts = (r.get("TransactionDateutc") or "").strip()
-        d = None
-        for fmt in ("%d/%m/%Y %H:%M", "%d/%m/%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
-            try:
-                d = (datetime.strptime(raw_ts, fmt) + timedelta(hours=10)).date()  # UTC -> AEST
-                break
-            except ValueError:
-                continue
-        if d is None:
+        dt = parse_dt(r.get("transactiondateutc"))
+        if dt is None:
+            DROPS["QLD bad timestamp"] += 1
             continue
-        yield d, str(r.get("SiteId") or r.get("Site_Name")), fuel, price
+        d = (dt + timedelta(hours=10)).date()      # UTC -> AEST; QLD has no DST
+        yield d, str(r.get("siteid") or r.get("site_name")), fuel, price
 
 
 def month_days(y, m):
@@ -179,9 +229,25 @@ def process_month(state, y, m, url, carry):
     """carry: {site|fuel: [iso_date, price]} entering the month. Returns (rows, carry_out)."""
     raw = fetch(url)
     reader = read_nsw if state == "NSW" else read_qld
+    DROPS.clear()
     events = defaultdict(list)          # day -> list of (key, fuel, price, day)
+    n_events = 0
     for d, site, fuel, price in reader(raw):
         events[d].append((f"{site}\x1f{fuel}", fuel, price, d))
+        n_events += 1
+    # A month that parses to nothing is a source format change, not an empty month. Left
+    # unchecked it is invisible: the forward-fill just carries the previous month's
+    # prices over the hole and the site count decays as sites go stale.
+    if n_events == 0:
+        raise ValueError(f"{state} {y}-{m:02d} parsed to 0 usable rows from {len(raw)} "
+                         f"bytes (drops: {dict(DROPS) or 'none'})")
+    if DROPS:
+        total = n_events + sum(DROPS.values())
+        share = sum(DROPS.values()) / total
+        note = f"  {state} {y}-{m:02d}: dropped {dict(DROPS)} of {total} rows"
+        if share > 0.05:
+            raise ValueError(note + f" - {share:.1%} is too many to be incidental")
+        print(note, flush=True)
 
     cur = {k: (date.fromisoformat(v[0]), v[1]) for k, v in carry.items()}
     rows = []
@@ -220,6 +286,7 @@ def main():
     live.add((pm.year, pm.month))
 
     fetched = reused = 0
+    failures = []
     for state in ("NSW", "QLD"):
         months = [k for k in keys if k[0] == state]
         carry = {}
@@ -233,7 +300,12 @@ def main():
             try:
                 rows, carry = process_month(state, y, m, found[(state, y, m)], carry)
             except Exception as e:
+                # Do NOT cache a failed month and do NOT carry its state forward: both
+                # would make the failure sticky across reruns and silently fabricate
+                # prices for the days it should have covered.
                 print(f"  !! {state} {y}-{m:02d} failed: {type(e).__name__}: {e}", flush=True)
+                failures.append(f"{state} {y}-{m:02d}: {type(e).__name__}: {e}")
+                carry = {}
                 continue
             with open(agg_p + ".tmp", "w", newline="") as fh:
                 w = csv.writer(fh); w.writerow(FIELDS); w.writerows(rows)
@@ -250,6 +322,11 @@ def main():
         if name.endswith(".csv"):
             with open(os.path.join(CACHE, name), newline="") as fh:
                 out.extend(list(csv.DictReader(fh)))
+    # Bail out BEFORE writing, so a failed run leaves the previous complete file in place
+    # rather than replacing it with a short one.
+    if failures:
+        raise SystemExit("retail source failures - refusing to write a short series:\n  "
+                         + "\n  ".join(failures))
     out.sort(key=lambda r: (r["date"], r["state"], r["product"]))
     with open(OUT, "w", newline="") as fh:
         w = csv.DictWriter(fh, FIELDS); w.writeheader(); w.writerows(out)
