@@ -11,7 +11,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from notes import write_notes
-from build_charts import write_charts
+from build_charts import write_charts, check_blank_handling
 
 WORK, OUT = sys.argv[1], sys.argv[2]
 RETAIL = "--no-retail" not in sys.argv[3:]
@@ -111,4 +111,5 @@ for stem, label, title, subtitle, numfmt in GROUPS:
 write_notes(wb, datetime.date.today().isoformat(), coverage, retail=RETAIL)
 write_charts(wb)
 wb.save(OUT)
+check_blank_handling(OUT)
 print(f"wrote {OUT} ({len(wb.sheetnames)} tabs)", flush=True)

@@ -12,6 +12,8 @@ colour-vision deficiency separation (worst adjacent pair dE 9.1 protan, normal-v
 because identity never rests on colour alone - every chart carries a legend, and the
 underlying table is one tab away.
 """
+import re, zipfile
+
 from openpyxl.chart import LineChart, Reference, Series
 from openpyxl.chart.axis import ChartLines
 from openpyxl.chart.shapes import GraphicalProperties
@@ -276,6 +278,18 @@ def check_ylim(ws, cols, first_row, last_row, ylim, chart_title, deliberate):
           f"{worst[2]} on {worst[0]:%Y-%m-%d}", flush=True)
 
 
+def blanks_are_gaps(chart):
+    """Missing data breaks the line; it is never drawn as a zero price.
+
+    openpyxl happens to default dispBlanksAs to "gap", but the OOXML default is "zero" -
+    so every chart here is one library default away from drawing a gap in a series as a
+    $0 price, which on this data would be a real number: electricity spot legitimately
+    settles at 0, so a reader could not tell an outage from a missing day. Say it
+    explicitly rather than inherit it. check_blank_handling() re-checks the saved file.
+    """
+    chart.display_blanks = "gap"
+
+
 def line_chart(ws, title, y_title, cols, first_row, last_row, ylim=None,
                width=15.5, height=8.2):
     chart = LineChart()
@@ -303,6 +317,7 @@ def line_chart(ws, title, y_title, cols, first_row, last_row, ylim=None,
         chart.append(s)
     chart.set_categories(Reference(ws, min_col=1, min_row=first_row, max_row=last_row))
     recede_axes(chart, last_row - first_row + 1)
+    blanks_are_gaps(chart)
     if len(chart.series) > 1:
         chart.legend.position = "b"
         chart.legend.overlay = False
@@ -357,6 +372,7 @@ def combined_chart(wb, state, elec_col, elec_name, gas_col, gas_name):
     c1.append(s)
     c1.set_categories(Reference(elec, min_col=1, min_row=e0, max_row=e1))
     recede_axes(c1, e1 - e0 + 1)
+    blanks_are_gaps(c1)   # chartSpace-level, so c1 carries it for the pair too
     c1.height, c1.width = 8.2, 15.5
 
     c2 = LineChart()
@@ -520,3 +536,30 @@ def write_charts(wb):
 
     ws.column_dimensions["A"].width = 2
     return ws
+
+
+def check_blank_handling(path):
+    """Every saved chart must say dispBlanksAs="gap", and every one must say it.
+
+    This is the belt to blanks_are_gaps()'s braces: it reads the file that actually
+    ships, so a chart added later without the call, or an openpyxl that stops writing
+    the element, is caught at build time rather than by someone noticing a price line
+    dive to zero.
+    """
+    with zipfile.ZipFile(path) as z:
+        charts = [n for n in z.namelist()
+                  if n.startswith("xl/charts/chart") and n.endswith(".xml")]
+        bad = []
+        for name in sorted(charts):
+            found = re.search(rb'dispBlanksAs val="(\w+)"', z.read(name))
+            if not found or found.group(1) != b"gap":
+                bad.append((name, found.group(1).decode() if found else "not set"))
+    if not charts:
+        raise SystemExit(f"ERROR: {path} has no charts - the Summary charts tab is empty.")
+    if bad:
+        listed = ", ".join(f"{n.split('/')[-1]} ({v})" for n, v in bad[:5])
+        raise SystemExit(
+            f"ERROR: {len(bad)} of {len(charts)} charts would plot missing values as "
+            f"zero instead of leaving a gap: {listed}. Every chart needs "
+            f"blanks_are_gaps() in build_charts.py.")
+    print(f"  {len(charts)} charts: missing values draw as gaps, not zeros", flush=True)
