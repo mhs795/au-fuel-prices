@@ -5,7 +5,7 @@ clean national weekday series, retail is a patchier state-by-state one.
 
   build_petrol.py <AIP.xlsx> <tgp_out.csv> [<fw_daily.csv> <state_daily.csv> <retail_out.csv>]
 """
-import csv, sys
+import csv, os, sys
 from collections import defaultdict
 from datetime import datetime
 import openpyxl
@@ -67,13 +67,53 @@ def build_tgp(aip_path, out_path):
                     pass
     wb.close()
     cols = [f"TGP_{f}_{c.lower()}" for f in ("petrol", "diesel") for c in CITIES]
+    filled = merge_archive(os.path.join(os.path.dirname(out_path) or ".", "petrol",
+                                        "tgp_archive.csv"), tgp, cols)
     dates = sorted(d for d in tgp if d >= "2004-01-01")   # the full span of the AIP file
     with open(out_path, "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["date"] + cols)
         for d in dates:
             w.writerow([d] + [tgp[d].get(c, "") for c in cols])
-    print(f"wrote {out_path} days {len(dates)} {dates[0]} -> {dates[-1]}", flush=True)
+    print(f"wrote {out_path} days {len(dates)} {dates[0]} -> {dates[-1]}"
+          + (f" ({filled} day(s) from the archive)" if filled else ""), flush=True)
+
+
+def merge_archive(path, tgp, cols):
+    """Keep days AIP has published in the past but does not publish today.
+
+    The AIP workbook is the whole history in one file, so it is normally its own
+    archive - until it goes backwards. AIP's August 2026 move to WordPress republished
+    a workbook ending 26 June while the series had already run to 14 August, and every
+    build reads the workbook fresh, so the shorter file would have silently truncated
+    the series by seven weeks on the next run. This is the same problem as the Gas
+    Supply Hub cache: data with no upstream to re-fetch it from, so it is tracked in
+    git rather than left on one disk.
+
+    The workbook always wins on any date it covers - the archive only fills dates it
+    does not reach - so AIP revisions still come straight from AIP.
+    """
+    filled = 0
+    if os.path.exists(path):
+        with open(path, newline="") as fh:
+            for row in csv.DictReader(fh):
+                d = row.get("date", "")[:10]
+                if not d or d in tgp:
+                    continue
+                vals = {c: float(row[c]) for c in cols if row.get(c) not in (None, "")}
+                if vals:
+                    tgp[d] = vals
+                    filled += 1
+
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["date"] + cols)
+        for d in sorted(tgp):
+            w.writerow([d] + [tgp[d].get(c, "") for c in cols])
+    os.replace(tmp, path)
+    return filled
 
 
 def build_retail(fw_path, state_path, out_path):

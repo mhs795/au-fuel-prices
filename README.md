@@ -61,6 +61,13 @@ every series at each frequency, built by `build_charts.py` from cells on the dat
   the gap; a month that parses to nothing is never cached. `build_electricity.py` aborts
   rather than write a series with unparsed rows — an earlier bug silently dropped everything before Nov 2003 because
   pre-2004 AEMO files omit seconds from the timestamp.
+- **Sources that go backwards are not allowed to shorten a series.** AIP moved to a new
+  site in August 2026 and republished a terminal gate price workbook ending 26 June,
+  seven weeks short of what it had already published. `fetch_aip.py` refuses to overwrite
+  a workbook with one covering less (or one it cannot read), and `build_petrol.py` keeps
+  the dropped days in `work/petrol/tgp_archive.csv`, which is tracked in git for the same
+  reason the Gas Supply Hub cache is: nothing upstream can re-serve them. AIP's file still
+  wins on every date it does cover, so revisions come from AIP.
 
 ## Layout
 
@@ -76,7 +83,7 @@ every series at each frequency, built by `build_charts.py` from cells on the dat
 | `fetch_gas_current.py` | nightly nemweb MIBB reports, to carry gas past the workbooks |
 | `fetch_gsh.py` | nemweb Gas Supply Hub trades; **caches irreplaceable history** |
 | `build_gas.py` | AEMO gas workbooks → daily |
-| `build_petrol.py` | AIP + retail sources → daily |
+| `build_petrol.py` | AIP + retail sources → daily; **archives TGP days AIP has dropped** |
 | `aggregate.py` | generic daily → monthly/quarterly/annual averaging |
 | `build_charts.py` | native Excel charts on the Summary charts tab |
 | `notes.py` | content of the Sources & notes tab |

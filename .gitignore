@@ -15,3 +15,12 @@ work/gas/*
 *.csv
 __pycache__/
 *.pyc
+
+# Same reasoning as the hub cache, for the terminal gate price series. AIP publishes
+# one workbook holding the whole history, so it is normally its own archive - but the
+# August 2026 site rebuild republished it seven weeks short, and every build reads the
+# workbook fresh. This archive holds the days AIP has dropped; nothing can re-fetch
+# them. Listed after the blanket rules above so the negations are the last match.
+!work/petrol/
+work/petrol/*
+!work/petrol/tgp_archive.csv
