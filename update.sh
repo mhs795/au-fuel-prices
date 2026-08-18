@@ -75,6 +75,12 @@ fi
 
 echo "== 3/5 AIP terminal gate prices"
 python3 "$HERE/fetch_aip.py" "$WORK/petrol/AIP_TGP.xlsx"
+# The workbook above is the whole history but it is only as current as AIP's website,
+# which since the August 2026 rebuild ends 26 June. api.aip.com.au is the app that
+# actually produces the numbers and is still publishing every weekday, so this carries
+# the series to yesterday. Same arrangement as the gas MIBB fetch above: master file for
+# history and revisions, live feed for the tail.
+python3 "$HERE/fetch_tgp_current.py" "$WORK/petrol/tgp_current.csv"
 
 # FUEL_NO_RETAIL=1 skips retail entirely and omits the retail tab from the workbook.
 if [ "${FUEL_NO_RETAIL:-0}" = "1" ]; then

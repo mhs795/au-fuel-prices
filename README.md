@@ -68,6 +68,14 @@ every series at each frequency, built by `build_charts.py` from cells on the dat
   the dropped days in `work/petrol/tgp_archive.csv`, which is tracked in git for the same
   reason the Gas Supply Hub cache is: nothing upstream can re-serve them. AIP's file still
   wins on every date it does cover, so revisions come from AIP.
+- **TGP is live again through a second source.** The rebuilt site's workbook is stale and
+  its own on-page tables query a broken view, but the app behind them,
+  `api.aip.com.au/public/tgpTables`, is still publishing every weekday. `fetch_tgp_current.py`
+  reads its rolling five-day window into a cache, exactly as `fetch_gas_current.py` carries
+  gas past the monthly workbooks. Precedence in `build_petrol.py` is workbook, then live
+  feed, then archive. The two AIP sources agreed on all 42 overlapping values when this
+  was wired up. National is blank for live-feed days — AIP publishes that weighted average
+  in the workbook only, and it is not recomputed here.
 
 ## Layout
 
@@ -77,6 +85,7 @@ every series at each frequency, built by `build_charts.py` from cells on the dat
 | `PRICES` | terminal wrapper installed on `~/.local/bin`; calls `update.sh` |
 | `fetch_nem.py` | AEMO NEM monthly price files |
 | `fetch_aip.py` | AIP terminal gate price workbook (scrapes the weekly link) |
+| `fetch_tgp_current.py` | AIP live TGP tables, to carry TGP past the workbook |
 | `fetch_fuelwatch.py` | FuelWatch WA retail, cached per month |
 | `fetch_state_retail.py` | NSW + QLD retail, price-change events → daily averages |
 | `build_electricity.py` | NEM intervals → daily/monthly/quarterly/annual |
