@@ -50,28 +50,33 @@ python3 "$HERE/fetch_gsh.py" "$WORK/gas/gsh_cache" "$WORK/gsh_daily.csv"
 # only ever extends the series past the workbooks' end, so revisions still come from them.
 python3 "$HERE/fetch_gas_current.py" "$WORK/gas/mibb_cache" "$WORK/gas_current.csv"
 
-# Keep the hub cache backed up OFF this machine. It has no upstream: once a day rolls off
-# nemweb's ~95-day window it exists nowhere else, so leaving it on one disk is not safe.
-# git is the backup - the files are small and immutable - but only if something actually
-# commits them, so the build does it rather than relying on anyone remembering.
-if git -C "$HERE" rev-parse --git-dir >/dev/null 2>&1; then
-  if [ -n "$(git -C "$HERE" status --porcelain -- work/gas/gsh_cache)" ]; then
-    n=$(git -C "$HERE" status --porcelain -- work/gas/gsh_cache | wc -l)
-    git -C "$HERE" add -- work/gas/gsh_cache
-    git -C "$HERE" commit -q -m "Gas Supply Hub cache: $n new file(s) to $(date +%Y-%m-%d)" \
-      -- work/gas/gsh_cache
-    # Push is best-effort: no network should not fail a build, but an unpushed cache is
-    # only as safe as this disk, so say so loudly.
-    if git -C "$HERE" push -q origin HEAD 2>/dev/null; then
-      echo "   gas supply hub cache: $n new file(s) committed and pushed"
-    else
-      echo "   !! gas supply hub cache: $n new file(s) committed but NOT PUSHED -" >&2
-      echo "   !! this data exists only on this disk until you push" >&2
-    fi
-  else
-    echo "   gas supply hub cache: no new files, $(ls "$WORK/gas/gsh_cache" | wc -l) tracked"
+backup_cache() {  # <path relative to $HERE> <label> <what is tracked, for the quiet line>
+  # Keep caches with no upstream backed up OFF this machine. Once a day rolls off the
+  # publisher's window it exists nowhere else, so leaving it on one disk is not safe.
+  # git is the backup - the files are small - but only if something actually commits
+  # them, so the build does it rather than relying on anyone remembering.
+  local path="$1" label="$2" quiet="$3"
+  git -C "$HERE" rev-parse --git-dir >/dev/null 2>&1 || return 0
+  if [ -z "$(git -C "$HERE" status --porcelain -- "$path")" ]; then
+    echo "   $label: nothing new, $quiet"
+    return 0
   fi
-fi
+  local n
+  n=$(git -C "$HERE" status --porcelain -- "$path" | wc -l)
+  git -C "$HERE" add -- "$path"
+  git -C "$HERE" commit -q -m "$label: $n change(s) to $(date +%Y-%m-%d)" -- "$path"
+  # Push is best-effort: no network should not fail a build, but an unpushed cache is
+  # only as safe as this disk, so say so loudly.
+  if git -C "$HERE" push -q origin HEAD 2>/dev/null; then
+    echo "   $label: $n change(s) committed and pushed"
+  else
+    echo "   !! $label: $n change(s) committed but NOT PUSHED -" >&2
+    echo "   !! this data exists only on this disk until you push" >&2
+  fi
+}
+
+backup_cache work/gas/gsh_cache "gas supply hub cache" \
+  "$(ls "$WORK/gas/gsh_cache" 2>/dev/null | wc -l) file(s) tracked"
 
 echo "== 3/5 AIP terminal gate prices"
 python3 "$HERE/fetch_aip.py" "$WORK/petrol/AIP_TGP.xlsx"
@@ -111,6 +116,12 @@ else
 fi
 python3 "$HERE/aggregate.py" "$WORK/tgp_daily.csv" "$WORK/tgp_monthly.csv" \
   "$WORK/tgp_quarterly.csv" "$WORK/tgp_annual.csv"
+
+# The TGP archive has the same problem as the hub cache while AIP's workbook is stuck at
+# 26 June 2026: the live tables publish five business days and then drop them, so a day
+# missed by every run of this build is gone. Back it up the same way.
+backup_cache work/petrol/tgp_archive.csv "terminal gate price archive" \
+  "$(( $(wc -l < "$WORK/petrol/tgp_archive.csv" 2>/dev/null || echo 1) - 1 )) day(s) tracked"
 
 # Check the invariants the workbook's own notes tab claims, BEFORE building and
 # publishing. A broken invariant here means a source changed shape and the series is
