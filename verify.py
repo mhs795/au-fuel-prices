@@ -303,6 +303,12 @@ CHECKS = [
     ("date hygiene", lambda: [check_dates(n) for n in
                               ("elec_daily.csv", "gas_daily.csv", "tgp_daily.csv",
                                "retail_daily.csv")]),
+    # NT and Darwin are deliberately not in this list. The check infers forward-fill
+    # over a source gap from a frozen group, which is sound for the event feeds (NSW,
+    # QLD) and for FuelWatch, all of which this build forward-fills. MyFuel NT is a
+    # daily snapshot that is never filled, so an exact repeat there means the Territory's
+    # posted prices genuinely did not move - and Darwin's routinely do not: 28 Darwin
+    # sites held the same ULP prices from 20 December 2017 to well into January 2018.
     ("no stalled feeds (retail)", lambda: check_no_stalled_runs(
         "retail_daily.csv", ["NSW", "QLD", "WA", "Perth"])),
     ("no stalled feeds (TGP)", lambda: check_no_stalled_runs(

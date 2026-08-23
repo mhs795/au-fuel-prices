@@ -12,7 +12,9 @@ import openpyxl
 
 CITIES = ["Sydney", "Melbourne", "Brisbane", "Adelaide", "Perth", "Darwin", "Hobart", "National"]
 PRODUCTS = ["ULP", "E10", "PULP95", "PULP98", "Diesel", "LPG"]
-SCOPES = ["NSW", "QLD", "WA", "Perth"]
+# NT and Darwin come from MyFuel NT, which stopped publishing after November 2024; the
+# columns are kept because blanks read as missing everywhere in this workbook.
+SCOPES = ["NSW", "QLD", "WA", "Perth", "NT", "Darwin"]
 MIN_SITES = 5   # too few sites reporting to be a meaningful average
 # FuelWatch's own product labels -> the common labels shared with NSW and QLD
 WA_FUEL = {"ULP": "ULP", "PULP": "PULP95", "98 RON": "PULP98", "Diesel": "Diesel",
@@ -131,7 +133,7 @@ def write_archive(path, tgp, cols):
     os.replace(tmp, path)
 
 
-def build_retail(fw_path, state_path, out_path):
+def build_retail(fw_path, state_paths, out_path):
     price = defaultdict(dict)     # date -> {scope_product: value}
     sites = defaultdict(lambda: defaultdict(int))
 
@@ -150,13 +152,20 @@ def build_retail(fw_path, state_path, out_path):
             price[r["date"]][f"{scope}_{prod}"] = float(r["mean_price_cpl"])
             sites[r["date"]][f"{scope}_{prod}"] = n
 
-    with open(state_path, newline="") as fh:
-        for r in csv.DictReader(fh):
-            if r["product"] not in PRODUCTS:
-                continue
-            scope = r["state"]
-            price[r["date"]][f"{scope}_{r['product']}"] = float(r["mean_price_cpl"])
-            sites[r["date"]][f"{scope}_{r['product']}"] = int(r["n_sites"])
+    # Every state feed writes the same five columns, so NSW/QLD and NT read identically;
+    # the "state" column carries the scope, which is why NT contributes both NT and Darwin.
+    for state_path in state_paths:
+        if not os.path.exists(state_path):
+            continue
+        with open(state_path, newline="") as fh:
+            for r in csv.DictReader(fh):
+                if r["product"] not in PRODUCTS:
+                    continue
+                scope = r["state"]
+                if scope not in SCOPES:
+                    continue
+                price[r["date"]][f"{scope}_{r['product']}"] = float(r["mean_price_cpl"])
+                sites[r["date"]][f"{scope}_{r['product']}"] = int(r["n_sites"])
 
     cols = [f"{s}_{p}" for s in SCOPES for p in PRODUCTS]
     # Per product, not per scope. A single count per scope was the max across that
@@ -176,4 +185,5 @@ def build_retail(fw_path, state_path, out_path):
 if __name__ == "__main__":
     build_tgp(sys.argv[1], sys.argv[2])
     if len(sys.argv) > 3:
-        build_retail(sys.argv[3], sys.argv[4], sys.argv[5])
+        # argv[6:] are further state-shaped CSVs (NT), appended after the retail output
+        build_retail(sys.argv[3], [sys.argv[4]] + sys.argv[6:], sys.argv[5])

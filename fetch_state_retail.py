@@ -110,20 +110,60 @@ def parse_month(name):
     return None
 
 
+def is_tabular(r):
+    """Is this resource an xlsx or csv we can read?
+
+    The declared `format` is not reliable: four NSW months (Aug 2023, Jul 2024, Mar 2025,
+    July 2025) are published with format="" and were therefore skipped by a format-only
+    test, leaving four silent month-long holes in the NSW series. They are ordinary
+    files - three xlsx and one csv - so fall back to the mimetype and then to the URL
+    extension before giving up. read_nsw sniffs the actual bytes anyway.
+    """
+    fmt = (r.get("format") or "").strip().lower()
+    if fmt:
+        return fmt.startswith("xlsx") or fmt.startswith("excel") or fmt == "csv"
+    mime = (r.get("mimetype") or "").strip().lower()
+    if mime:
+        return "spreadsheet" in mime or "excel" in mime or "csv" in mime
+    return (r.get("url") or "").strip().lower().endswith((".xlsx", ".csv"))
+
+
+def check_continuity(keys):
+    """Warn when a state's discovered months have a hole in the middle.
+
+    Discovery failures are otherwise invisible: an undiscovered month never runs, so it
+    never fails, and the workbook just carries a blank stretch. This is what hid the four
+    blank-format NSW months.
+    """
+    for state in ("NSW", "QLD"):
+        ms = sorted((y, m) for (s, y, m) in keys if s == state)
+        if not ms:
+            continue
+        want = []
+        y, m = ms[0]
+        while (y, m) <= ms[-1]:
+            want.append((y, m))
+            y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+        holes = [f"{y}-{m:02d}" for (y, m) in want if (y, m) not in set(ms)]
+        if holes:
+            print(f"  !! {state}: {len(holes)} month(s) missing from the source listing "
+                  f"between {ms[0][0]}-{ms[0][1]:02d} and {ms[-1][0]}-{ms[-1][1]:02d}: "
+                  + ", ".join(holes), flush=True)
+
+
 def discover():
     """-> {(state, year, month): url}"""
     out = {}
     pkg = json.loads(fetch(NSW_PKG))["result"]
     for r in pkg["resources"]:
-        fmt = (r.get("format") or "").lower()
-        if not (fmt.startswith("xlsx") or fmt.startswith("excel") or fmt == "csv"):
+        if not is_tabular(r):
             continue
         ym = parse_month(r.get("name"))
         if ym:
             out[("NSW", ym[0], ym[1])] = r["url"]
     for p in json.loads(fetch(QLD_SEARCH))["result"]["results"]:
         for r in p.get("resources", []):
-            if (r.get("format") or "").upper() != "CSV":
+            if not is_tabular(r):
                 continue
             ym = parse_month(r.get("name"))
             if ym:
@@ -279,6 +319,7 @@ def main():
     print(f"{len(keys)} state-months discovered "
           f"(NSW {sum(1 for k in keys if k[0]=='NSW')}, QLD {sum(1 for k in keys if k[0]=='QLD')})",
           flush=True)
+    check_continuity(keys)
 
     today = date.today()
     live = {(today.year, today.month)}

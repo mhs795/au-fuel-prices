@@ -63,8 +63,14 @@ SERIES = [
       ("GSH_WAL_price", "Wallumbilla GSH", 4)], None),
     ("Petrol TGP", "Petrol wholesale TGP, national", "cents/litre",
      [("TGP_petrol_national", "Petrol"), ("TGP_diesel_national", "Diesel")], PETROL_YLIM),
+    # NT is charted alongside the three live states even though its data stops in
+    # December 2024, because seven years of the dearest pump prices in the country is
+    # worth seeing on the monthly, quarterly and annual charts. It is a short segment at
+    # the left of the two-year daily chart and absent from the calendar-year ones; that
+    # is the series ending, not a drawing fault, and blanks plot as gaps throughout.
     ("Petrol retail", "Retail ULP pump price", "cents/litre",
-     [("NSW_ULP", "NSW"), ("QLD_ULP", "QLD"), ("WA_ULP", "WA")], PETROL_YLIM),
+     [("NSW_ULP", "NSW"), ("QLD_ULP", "QLD"), ("WA_ULP", "WA"), ("NT_ULP", "NT")],
+     PETROL_YLIM),
 ]
 
 # Row selectors. None is the whole tab; ("window", n) is the trailing n years measured

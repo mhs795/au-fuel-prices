@@ -91,9 +91,12 @@ python3 "$HERE/fetch_tgp_current.py" "$WORK/petrol/tgp_current.csv"
 if [ "${FUEL_NO_RETAIL:-0}" = "1" ]; then
   echo "== 4/5 retail SKIPPED (no-retail build)"
 else
-  echo "== 4/5 retail pump prices (WA FuelWatch, NSW FuelCheck, QLD)"
+  echo "== 4/5 retail pump prices (WA FuelWatch, NSW FuelCheck, QLD, NT MyFuel)"
   python3 "$HERE/fetch_fuelwatch.py" "$WORK/petrol/fw_daily.csv"
   python3 "$HERE/fetch_state_retail.py" "$WORK/petrol/state_daily.csv"
+  # MyFuel NT stopped publishing after November 2024, so this is a closed archive: every
+  # workbook is cached and reused, and a run normally fetches nothing.
+  python3 "$HERE/fetch_nt_fuel.py" "$WORK/petrol/nt_daily.csv"
 fi
 
 echo "== 5/5 building series and workbook"
@@ -110,7 +113,8 @@ if [ "${FUEL_NO_RETAIL:-0}" = "1" ]; then
   python3 "$HERE/build_petrol.py" "$WORK/petrol/AIP_TGP.xlsx" "$WORK/tgp_daily.csv"
 else
   python3 "$HERE/build_petrol.py" "$WORK/petrol/AIP_TGP.xlsx" "$WORK/tgp_daily.csv" \
-    "$WORK/petrol/fw_daily.csv" "$WORK/petrol/state_daily.csv" "$WORK/retail_daily.csv"
+    "$WORK/petrol/fw_daily.csv" "$WORK/petrol/state_daily.csv" "$WORK/retail_daily.csv" \
+    "$WORK/petrol/nt_daily.csv"
   python3 "$HERE/aggregate.py" "$WORK/retail_daily.csv" "$WORK/retail_monthly.csv" \
     "$WORK/retail_quarterly.csv" "$WORK/retail_annual.csv"
 fi

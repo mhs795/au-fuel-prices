@@ -25,6 +25,7 @@ re-fetched. The first build downloads several GB.
 | Gas — Gas Supply Hub, Wallumbilla + SEQ, $/GJ | Apr 2026 | nightly, 30-day window |
 | Petrol terminal gate prices — 7 capitals + national, c/L | Jan 2004 | weekdays |
 | Petrol retail — NSW, QLD, WA + Perth, c/L | 2015 (WA), Aug 2016 (NSW), Feb 2019 (QLD) | monthly refresh |
+| Petrol retail — NT + Darwin, c/L | Nov 2017 – **Nov 2024 (closed)** | source ceased publishing |
 
 ## Sources
 
@@ -34,11 +35,27 @@ re-fetched. The first build downloads several GB.
 - **Gas Supply Hub** — nemweb `GSH_Historical_Trans_Summary`, a rolling 30-day window
 - **Petrol wholesale** — Australian Institute of Petroleum terminal gate prices
 - **Petrol retail** — FuelWatch WA, NSW FuelCheck (data.nsw.gov.au), QLD Fuel Price
-  Reporting (data.qld.gov.au)
+  Reporting (data.qld.gov.au), MyFuel NT (data.nt.gov.au)
 
 Full method, caveats and exact file URLs are written into the workbook's
 *Sources & notes* tab by `notes.py`. A *Summary charts* tab holds native Excel charts of
 every series at each frequency, built by `build_charts.py` from cells on the data tabs.
+
+## Retail coverage, and what is not there
+
+Victoria has no mandatory fuel price reporting scheme. South Australia, Tasmania and the
+ACT each run one, but release the feed only to approved data publishers under an API
+agreement and publish no open bulk archive — an access restriction, not a parsing
+problem. The NT is covered but its source stopped: MyFuel NT published to November 2024
+and nothing since, so those columns are history and end there rather than being dropped.
+
+**Declared format is not a filter.** Four NSW months (Aug 2023, Jul 2024, Mar 2025, Jul
+2025) are published on data.nsw.gov.au with an empty `format` field. Filtering discovery
+on that field skipped them, and because an undiscovered month never runs it never fails
+either — the result was four silent month-long holes that the notes tab had recorded as
+"not published". They are published. Discovery now falls back to the mimetype and then to
+the URL extension, and `check_continuity` reports any month missing from a state's
+listing so the next one cannot hide.
 
 ## Design notes
 
