@@ -122,6 +122,7 @@ ln -sf "$PWD/PRICES" ~/.local/bin/PRICES
 ln -sf "$PWD/PRICES" ~/.local/bin/prices
 ```
 
-`PRICES` expects the scripts at `~/au_fuel_prices/`; edit `SCRIPT` at the
+`PRICES` resolves `update.sh` relative to its own location (following the
+`~/.local/bin/PRICES` symlink), so it works wherever the repo lives; see `SCRIPT` at the
 top of the wrapper if they live elsewhere. Set `FUEL_DEST` to change where the workbook
 is written.

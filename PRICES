@@ -4,10 +4,13 @@
 #   PRICES              everything, including the retail pump price tab
 #   PRICES NO RETAIL    skip retail; the workbook is built without that tab
 #
-# Thin wrapper around ~/au_fuel_prices/update.sh.
+# Thin wrapper around this repo's own update.sh.
 set -euo pipefail
 
-SCRIPT="$HOME/au_fuel_prices/update.sh"
+# Resolve update.sh RELATIVE TO THIS SCRIPT, following the symlink that puts
+# PRICES on $PATH (~/.local/bin/PRICES), so the launcher keeps working wherever
+# the repo lives. A hardcoded $HOME path here broke when the models moved.
+SCRIPT="$(dirname "$(readlink -f "$0")")/update.sh"
 export FUEL_NO_RETAIL=0
 pass=()
 
